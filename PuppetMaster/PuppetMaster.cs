@@ -10,24 +10,28 @@ namespace PuppetMaster
 
         }
 
-        public void DeliverCommand(string command)
+        public void DeliverCommand(string[] commandArgs)
         {
-            
+            throw new NotImplementedException();
         }
 
         public void SendCommand(string log)
         {
             throw new NotImplementedException();
         }
-
-
+        
+        public void Register(string siteParent)
+        {
+            Console.WriteLine("Register");
+        }
 
         /// <summary>
-        ///     This method is used just to check if the site is up
-        ///     If it's not, the call will fail
+        /// This method is just here for testing purposes.
+        /// If it fails then there is a connection problem
         /// </summary>
         public void Ping()
         {
+            
         }
     }
 }

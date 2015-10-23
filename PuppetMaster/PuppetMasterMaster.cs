@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq.Expressions;
 using System.Net.Sockets;
+using System.Security.Policy;
 using CommonTypes;
 
 namespace PuppetMaster
@@ -12,9 +13,11 @@ namespace PuppetMaster
         public Form1 Form { get; set; }
         public IDictionary<string, IPuppetMaster> Slaves { get; set; }
         private delegate void DelegateDeliverMessage(string message);
+        public string Site {get; private set; }
 
-        public PuppetMasterMaster()
+        public PuppetMasterMaster(string siteName)
         {
+            Site = siteName;
             Slaves = new Dictionary<string, IPuppetMaster>();
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
@@ -33,7 +36,32 @@ namespace PuppetMaster
         public void SendCommand(string command)
         {
             string[] args;
-            string process = ParseCommand(command, out args);
+            string process;
+
+            try
+            {
+                process = ParseCommand(command, out args);
+            }
+            catch (CommandParsingException e)
+            {
+                Console.WriteLine(e.Message);
+                return;
+            }
+
+            if (process.Equals("all"))
+            {
+                foreach (IPuppetMaster slave in Slaves.Values)
+                {
+                    slave.DeliverCommand(args);
+                }
+            }
+            else
+            {
+               /* try
+                {*/
+                    Slaves[process].DeliverCommand(args);
+                //} catch()
+            }
         }
 
         /// <summary>
@@ -106,31 +134,39 @@ namespace PuppetMaster
                 string processType = tokens[3];
                 string processName = tokens[1];
 
-                IPuppetMaster slave = Connect(processName, processUrl);
+                // needs to be changed
+                // CreateProcess (... ,... ,...);
+                
 
-                if (slave == null)
-                    return;
-
-                Console.WriteLine("Type: " + processType + "; Name: " + processName + "; URL: " + processUrl);
             }
-            else if (tokens[0].Equals("Site"))
+            else if (tokens[0].Equals("Site") && !tokens[1].Equals(Site))
             {
-                ;
+                string siteParent = tokens[3];
+                string siteName = tokens[1];
+
+                // the site's port is given by the sum of 8080 and the site number (e.g., 0 for site0)
+                int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
+                string siteUrl = "tcp://localhost:" + port + "/" + siteName;
+
+                ConnectToSite(siteName, siteUrl, siteParent);
             }
         }
 
         /// <summary>
         ///     Connects to the puppetMaster at the specified site
         /// </summary>
+        /// <param name="name"> The machine's name </param>
         /// <param name="url"> The site's URL </param>
+        /// <param name="siteParent"> The site's parent in the tree </param>
         /// <returns> A puppetMaster instance or null if the site is down </returns>
-        private IPuppetMaster Connect(string name, string url)
+        private IPuppetMaster ConnectToSite(string name, string url, string siteParent)
         {
             try
             {
+                Console.WriteLine("Connecting to "+url);
                 IPuppetMaster slave = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), url);
-                // test if the server is up
-                slave.Ping();           
+                slave.Ping();
+                slave.Register(siteParent);
                 Slaves.Add(name, slave);
                 return slave;
 
@@ -138,6 +174,11 @@ namespace PuppetMaster
             catch (SocketException)
             {
                 Console.WriteLine(@"Couldn't connect to " + url);
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                Console.WriteLine(@"The slave '"+name+@"' already exists");
                 return null;
             }
 

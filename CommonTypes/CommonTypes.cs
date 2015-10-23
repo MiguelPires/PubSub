@@ -9,8 +9,9 @@ namespace CommonTypes
     public interface IPuppetMaster
     {
         void DeliverConfig(string processType, string processName, string processUrl);
-        void DeliverCommand(string command);
+        void DeliverCommand(string[] commandArgs);
         void SendCommand(string log);
+        void Register(string siteParent);
         void Ping();
     }
 

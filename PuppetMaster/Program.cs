@@ -21,50 +21,58 @@ namespace PuppetMaster
         [STAThread]
         static void Main(string[] args)
         {
-            if (!args.Any() || args[0].Equals("-m"))
-                InitializePuppetMasterMaster();
+            if (args[0].Equals("-m"))
+                InitializePuppetMasterMaster(args[1]);
             else
             {
-                InitializePuppetMasterSlave(port: int.Parse(args[0]), name: args[1]);
+                InitializePuppetMasterSlave(args[0]);
             }
         }
 
-        private static void InitializePuppetMasterSlave(int port, string name)
+        private static void InitializePuppetMasterSlave(string siteName)
         {
-            PuppetMaster master = new PuppetMaster();
-
+            PuppetMaster puppet = new PuppetMaster();
             var serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
+            // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
+            int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
+
             IDictionary prop = new Hashtable();
             prop["port"] = port;
-            prop["name"] = name;
+            prop["name"] = siteName;
+
             var channel = new TcpChannel(prop, null, serverProv);
-
             ChannelServices.RegisterChannel(channel, false);
-
-            RemotingServices.Marshal(master, name, typeof(IPuppetMaster));
-
+            RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof(IPuppetMaster));
+            
+            string url = "tcp://localhost:" + port + "/" + siteName;
+            Console.WriteLine(@"Running at url: " + url);
             Console.WriteLine(@"Press any key to exit");
             Console.ReadLine();
         }
 
-        private static void InitializePuppetMasterMaster()
+        private static void InitializePuppetMasterMaster(string siteName)
         {
-            PuppetMasterMaster master = new PuppetMasterMaster();
-
+            PuppetMasterMaster master = new PuppetMasterMaster(siteName);
             var serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
+            // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
+            int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
+
+
+
             IDictionary prop = new Hashtable();
-            // the puppet master master port is fixed
-            prop["port"] = 8081;
+            prop["port"] = port;
             prop["name"] = "PuppetMasterMaster";
+
+            string url = "tcp://localhost:" + port + "/" + prop["name"];
+            Console.WriteLine(@"Running at url: " + url);
+
             var channel = new TcpChannel(prop, null, serverProv);
-
             ChannelServices.RegisterChannel(channel, false);
-
-            RemotingServices.Marshal(master, "PuppetMasterMaster", typeof(IPuppetMasterMaster));
+            RemotingServices.Marshal(master, prop["name"].ToString(), typeof(IPuppetMasterMaster));
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

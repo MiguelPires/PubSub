@@ -31,14 +31,12 @@ namespace PuppetMaster
 
         private static void InitializePuppetMasterSlave(string siteName)
         {
-            PuppetMaster puppet = new PuppetMaster();
+            PuppetMaster puppet = new PuppetMaster(siteName);
             var serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
-            // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
-            int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
-
             IDictionary prop = new Hashtable();
+            int port = UtilityFunctions.GetPort(siteName);
             prop["port"] = port;
             prop["name"] = siteName;
 
@@ -58,17 +56,10 @@ namespace PuppetMaster
             var serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
-            // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
-            int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
-
-
-
             IDictionary prop = new Hashtable();
+            int port = UtilityFunctions.GetPort(siteName);
             prop["port"] = port;
             prop["name"] = "PuppetMasterMaster";
-
-            string url = "tcp://localhost:" + port + "/" + prop["name"];
-            Console.WriteLine(@"Running at url: " + url);
 
             var channel = new TcpChannel(prop, null, serverProv);
             ChannelServices.RegisterChannel(channel, false);
@@ -80,6 +71,8 @@ namespace PuppetMaster
             master.Form = form;
             Application.Run(form);
 
+            string url = "tcp://localhost:" + port + "/" + prop["name"];
+            Console.WriteLine(@"Running at url: " + url);
             Console.WriteLine(@"Press any key to exit");
             Console.ReadLine();
         }

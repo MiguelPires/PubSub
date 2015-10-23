@@ -5,8 +5,17 @@ namespace PuppetMaster
 {
     public class PuppetMaster : MarshalByRefObject, IPuppetMaster
     {
-        public void DeliverConfig(string processType, string processName, string processUrl)
+        public string Site { get; private set; }
+        public string ParentSite { get; private set; }
+        public IPuppetMasterMaster Master { get; private set; }
+
+        public PuppetMaster(string siteName)
         {
+            Site = siteName;
+        }
+        public void DeliverConfig(string processName, string processType, string processUrl)
+        {
+           // throw new NotImplementedException();
 
         }
 
@@ -20,9 +29,11 @@ namespace PuppetMaster
             throw new NotImplementedException();
         }
         
-        public void Register(string siteParent)
+        public void Register(string siteParent, string masterSite)
         {
-            Console.WriteLine("Register");
+            ParentSite = siteParent;
+            string url = "tcp://localhost:" + UtilityFunctions.GetPort(Site) + "/PuppetMasterMaster";
+            Master = (IPuppetMasterMaster) Activator.GetObject(typeof(IPuppetMasterMaster), url);
         }
 
         /// <summary>
@@ -31,7 +42,6 @@ namespace PuppetMaster
         /// </summary>
         public void Ping()
         {
-            
         }
     }
 }

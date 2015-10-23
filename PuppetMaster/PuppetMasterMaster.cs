@@ -10,15 +10,25 @@ namespace PuppetMaster
 {
     public class PuppetMasterMaster : MarshalByRefObject, IPuppetMasterMaster
     {
-        public Form1 Form { get; set; }
-        public IDictionary<string, IPuppetMaster> Slaves { get; set; }
+        // GUI
+        public Form1 Form { get; set; }        
         private delegate void DelegateDeliverMessage(string message);
+
+        // this site's name
         public string Site {get; private set; }
+
+        // maps a site to it's puppetMaster
+        public IDictionary<string, IPuppetMaster> Slaves { get; set; }
+
+        // maps a process to it's site
+        public IDictionary<string, string> Processes;
+
 
         public PuppetMasterMaster(string siteName)
         {
             Site = siteName;
             Slaves = new Dictionary<string, IPuppetMaster>();
+            
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
             string line;
@@ -133,10 +143,24 @@ namespace PuppetMaster
                 string processUrl = tokens[7];
                 string processType = tokens[3];
                 string processName = tokens[1];
+                string siteName = tokens[5];
 
-                // needs to be changed
-                // CreateProcess (... ,... ,...);
-                
+                if (siteName.Equals(Site))
+                {
+                    DeliverLocalConfig(processName, processType, processUrl);
+                    return;
+                }
+
+                try
+                {
+                    IPuppetMaster slave = Slaves[siteName];
+                    slave.DeliverConfig(processName, processType, processUrl);
+
+                }
+                catch (KeyNotFoundException)
+                {
+                    Console.WriteLine("Config wasn't delivered to the site '"+siteName+"'");
+                }
 
             }
             else if (tokens[0].Equals("Site") && !tokens[1].Equals(Site))
@@ -144,11 +168,7 @@ namespace PuppetMaster
                 string siteParent = tokens[3];
                 string siteName = tokens[1];
 
-                // the site's port is given by the sum of 8080 and the site number (e.g., 0 for site0)
-                int port = 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
-                string siteUrl = "tcp://localhost:" + port + "/" + siteName;
-
-                ConnectToSite(siteName, siteUrl, siteParent);
+                ConnectToSite(siteName, siteParent);
             }
         }
 
@@ -156,32 +176,39 @@ namespace PuppetMaster
         ///     Connects to the puppetMaster at the specified site
         /// </summary>
         /// <param name="name"> The machine's name </param>
-        /// <param name="url"> The site's URL </param>
         /// <param name="siteParent"> The site's parent in the tree </param>
         /// <returns> A puppetMaster instance or null if the site is down </returns>
-        private IPuppetMaster ConnectToSite(string name, string url, string siteParent)
+        private IPuppetMaster ConnectToSite(string name, string siteParent)
         {
+            string siteUrl = "tcp://localhost:" + UtilityFunctions.GetPort(name) + "/" + name;
+
             try
             {
-                Console.WriteLine("Connecting to "+url);
-                IPuppetMaster slave = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), url);
+                Console.WriteLine("Connecting to " + siteUrl);
+
+                IPuppetMaster slave = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), siteUrl);
                 slave.Ping();
-                slave.Register(siteParent);
+                slave.Register(siteParent, Site);
                 Slaves.Add(name, slave);
                 return slave;
 
             }
             catch (SocketException)
             {
-                Console.WriteLine(@"Couldn't connect to " + url);
+                Console.WriteLine(@"Couldn't connect to " + siteUrl);
                 return null;
             }
             catch (ArgumentException)
             {
-                Console.WriteLine(@"The slave '"+name+@"' already exists");
+                Console.WriteLine(@"The slave at "+name+@" already exists");
                 return null;
             }
 
+        }
+
+        private void DeliverLocalConfig(string processName, string processType, string processUrl)
+        {
+            //throw new NotImplementedException();
         }
     }
 }

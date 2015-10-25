@@ -45,7 +45,7 @@ namespace PuppetMaster
             RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof(IPuppetMaster));
             
             string url = "tcp://localhost:" + port + "/" + siteName;
-            Console.WriteLine(@"Running at url: " + url);
+            Console.WriteLine(@"Running a "+puppet+" at " + url);
             Console.WriteLine(@"Press any key to exit");
             Console.ReadLine();
         }
@@ -65,14 +65,15 @@ namespace PuppetMaster
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(master, prop["name"].ToString(), typeof(IPuppetMasterMaster));
 
+            string url = "tcp://localhost:" + port + "/" + prop["name"];
+            Console.WriteLine(@"Running a " + master + " at " + url);
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Form1 form = new Form1(master);
             master.Form = form;
             Application.Run(form);
 
-            string url = "tcp://localhost:" + port + "/" + prop["name"];
-            Console.WriteLine(@"Running at url: " + url);
             Console.WriteLine(@"Press any key to exit");
             Console.ReadLine();
         }

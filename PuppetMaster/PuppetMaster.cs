@@ -1,38 +1,69 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Runtime.Remoting;
+using System.Runtime.Remoting.Channels;
+using System.Runtime.Remoting.Channels.Tcp;
+using System.Runtime.Serialization.Formatters;
 using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMaster : MarshalByRefObject, IPuppetMaster
+    public class PuppetMaster : MarshalByRefObject, IPuppetMaster, IProcessMaster
     {
-        public string Site { get; private set; }
+        public string SiteName { get; private set; }
         public string ParentSite { get; private set; }
         public IPuppetMasterMaster Master { get; private set; }
 
+        // maps a process name to the process instance
+        public IDictionary<string, IProcess> Processes { get; private set; }
+
+
         public PuppetMaster(string siteName)
         {
-            Site = siteName;
+            SiteName = siteName;
         }
-        public void DeliverConfig(string processName, string processType, string processUrl)
+
+        public override string ToString()
         {
-           // throw new NotImplementedException();
-
+            return "PuppetMaster";
         }
 
-        public void DeliverCommand(string[] commandArgs)
+        void IPuppetMaster.DeliverConfig(string processName, string processType, string processUrl)
+        {
+            switch (processType)
+            {
+                case "broker":
+                    Broker broker = new Broker(processName, processUrl, this);
+                    PublishService(processName, processUrl, broker);
+                    break;
+
+                case "publisher":
+                    break;
+
+                case "subscriber":
+                    break;
+            }
+        }
+
+        void IPuppetMaster.DeliverCommand(string[] commandArgs)
         {
             throw new NotImplementedException();
         }
 
-        public void SendCommand(string log)
+        void IPuppetMaster.SendCommand(string log)
         {
-            throw new NotImplementedException();
+            if (!string.IsNullOrEmpty(log))
+                Master.DeliverLog(log);
+            else
+                Console.WriteLine(@"Problem - SendCommand: The log line shouldn't be empty");
         }
-        
-        public void Register(string siteParent, string masterSite)
+
+        void IPuppetMaster.Register(string siteParent, string masterSite)
         {
             ParentSite = siteParent;
-            string url = "tcp://localhost:" + UtilityFunctions.GetPort(Site) + "/PuppetMasterMaster";
+            string url = "tcp://localhost:" + UtilityFunctions.GetPort(SiteName) + "/PuppetMasterMaster";
             Master = (IPuppetMasterMaster) Activator.GetObject(typeof(IPuppetMasterMaster), url);
         }
 
@@ -42,6 +73,39 @@ namespace PuppetMaster
         /// </summary>
         public void Ping()
         {
+        }
+
+
+        private void PublishService(string processName, string url, IProcess process)
+        {
+            PuppetMaster puppet = new PuppetMaster(processName);
+            var serverProv = new BinaryServerFormatterSinkProvider();
+            serverProv.TypeFilterLevel = TypeFilterLevel.Full;
+
+            IDictionary prop = new Hashtable();
+
+            int port;
+            string serviceName;
+            if (!UtilityFunctions.DivideUrl(url, out port, out serviceName))
+            {
+                Console.WriteLine("Invalid URL");
+                return;
+            }
+
+            prop["port"] = port;
+            prop["name"] = serviceName;
+
+            var channel = new TcpChannel(prop, null, serverProv);
+            ChannelServices.RegisterChannel(channel, false);
+            RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof(IPuppetMaster));
+
+            Console.WriteLine(@"Running a "+process+" at " + url);
+        }
+
+
+        void IProcessMaster.DeliverLogToPuppetMaster(string log)
+        {
+            throw new NotImplementedException();
         }
     }
 }

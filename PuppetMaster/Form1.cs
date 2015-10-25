@@ -7,12 +7,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CommonTypes;
 
 namespace PuppetMaster
 {
     public partial class Form1 : Form
     {
-        private PuppetMasterMaster master;
+        private IPuppetMasterMaster master;
 
         public Form1(PuppetMasterMaster master)
         {
@@ -44,7 +45,7 @@ namespace PuppetMaster
 
         private void IndividualButton_Click(object sender, EventArgs e)
         {
-            master.SendCommand(IndividualBox.Text);
+            master.SendCommand(this.IndividualBox.Text);
         }
     }
 }

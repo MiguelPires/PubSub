@@ -1,34 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq.Expressions;
 using System.Net.Sockets;
-using System.Security.Policy;
 using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMasterMaster : MarshalByRefObject, IPuppetMasterMaster
+    public class PuppetMasterMaster : MarshalByRefObject, IPuppetMasterMaster, IProcessMaster
     {
         // GUI
-        public Form1 Form { get; set; }        
-        private delegate void DelegateDeliverMessage(string message);
-
+        public Form1 Form { get; set; }
         // this site's name
-        public string Site {get; private set; }
-
+        public string Site { get; }
+        // this site's parent
+        public string Parent { get; private set; }
         // maps a site to it's puppetMaster
         public IDictionary<string, IPuppetMaster> Slaves { get; set; }
-
-        // maps a process to it's site
+        // the list of processes that run in this site
+        public List<IProcess> LocalProcesses { get; set; }
+        // the logging setting
+        public LoggingLevel LoggingLevel = LoggingLevel.Light;
+        // the ordering setting
+        public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.FIFO;
+        // maps a process to it's site name
         public IDictionary<string, string> Processes;
+        // the routing setting
+        public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
+
+        private delegate void DelegateDeliverMessage(string message);
 
 
         public PuppetMasterMaster(string siteName)
         {
             Site = siteName;
             Slaves = new Dictionary<string, IPuppetMaster>();
-            
+            LocalProcesses = new List<IProcess>();
+            Processes = new Dictionary<string, string>();
+
+
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
             string line;
@@ -38,12 +47,17 @@ namespace PuppetMaster
             }
         }
 
-        public void DeliverCommand(string message)
+        void IProcessMaster.DeliverLogToPuppetMaster(string log)
+        {
+            throw new NotImplementedException();
+        }
+
+        void IPuppetMasterMaster.DeliverLog(string message)
         {
             Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message);
         }
 
-        public void SendCommand(string command)
+        void IPuppetMasterMaster.SendCommand(string command)
         {
             string[] args;
             string process;
@@ -67,25 +81,29 @@ namespace PuppetMaster
             }
             else
             {
-               /* try
+                /* try
                 {*/
-                    Slaves[process].DeliverCommand(args);
+                Slaves[process].DeliverCommand(args);
                 //} catch()
             }
         }
 
+        public override string ToString()
+        {
+            return "PuppetMasterMaster";
+        }
+
         /// <summary>
-        /// Parses a user's command 
+        ///     Parses a user's command
         /// </summary>
         /// <param name="command">The full command line</param>
         /// <param name="args">An output parameter with the arguments to be passed to the process, if any</param>
         /// <returns> The process that will receive the command</returns>
-
         private string ParseCommand(string command, out string[] args)
         {
             string[] tokens = command.Split(' ');
             string process;
-             args = new string[4];
+            args = new string[4];
             switch (tokens[0])
             {
                 case "Subscriber":
@@ -103,7 +121,7 @@ namespace PuppetMaster
                     break;
 
                 case "Status":
-                    process = "all";    // all processes
+                    process = "all"; // all processes
                     args[0] = "Status";
                     break;
 
@@ -125,50 +143,122 @@ namespace PuppetMaster
                 // the wait command has a different purpose, but should also be parsed
 
                 default:
-                    throw new CommandParsingException("Unknown command: "+command);
+                    throw new CommandParsingException("Unknown command: " + command);
             }
             return process;
         }
 
         /// <summary>
-        /// Parses a line of config file
+        ///     Parses a line of config file
         /// </summary>
-        /// <param name="line"></param>
+        /// <param name="line"> A line of the config file </param>
         private void ParseConfig(string line)
         {
             string[] tokens = line.Split(' ');
 
             if (tokens[0].Equals("Process"))
             {
-                string processUrl = tokens[7];
-                string processType = tokens[3];
-                string processName = tokens[1];
-                string siteName = tokens[5];
-
-                if (siteName.Equals(Site))
-                {
-                    DeliverLocalConfig(processName, processType, processUrl);
-                    return;
-                }
-
-                try
-                {
-                    IPuppetMaster slave = Slaves[siteName];
-                    slave.DeliverConfig(processName, processType, processUrl);
-
-                }
-                catch (KeyNotFoundException)
-                {
-                    Console.WriteLine("Config wasn't delivered to the site '"+siteName+"'");
-                }
-
+                ParseProcess(tokens);
             }
-            else if (tokens[0].Equals("Site") && !tokens[1].Equals(Site))
+            else if (tokens[0].Equals("Site"))
             {
-                string siteParent = tokens[3];
-                string siteName = tokens[1];
+                ParseSite(tokens);
+            }
+            else if (tokens[0].Equals("Ordering"))
+            {
+                ParseOrdering(tokens);
+            }
+            else if (tokens[0].Equals("RoutingPolicy"))
+            {
+                ParseRouting(tokens);
+            }
+            else if (tokens[0].Equals("LoggingLevel"))
+            {
+                ParseLogging(tokens);
+            }
+        }
 
+        // Each of the following functions parses a specific type of entry in the config file
+        private void ParseProcess(string[] tokens)
+        {
+            string processUrl = tokens[7];
+            string processType = tokens[3];
+            string processName = tokens[1];
+            string siteName = tokens[5];
+
+            // if the site is this site
+            if (siteName.Equals(Site))
+            {
+                DeliverLocalConfig(processName, processType, processUrl);
+                return;
+            }
+
+            try
+            {
+                IPuppetMaster slave = Slaves[siteName];
+                slave.DeliverConfig(processName, processType, processUrl);
+                Processes[processName] = siteName;
+            }
+            catch (KeyNotFoundException)
+            {
+                Console.WriteLine("Config wasn't delivered to the site '" + siteName + "'");
+            }
+        }
+
+        private void ParseSite(string[] tokens)
+        {
+            string siteParent = tokens[3];
+            string siteName = tokens[1];
+
+            if (tokens[1].Equals(Site))
+                Parent = siteParent;
+            else
                 ConnectToSite(siteName, siteParent);
+        }
+
+        private void ParseOrdering(string[] tokens)
+        {
+            switch (tokens[1])
+            {
+                case "NO":
+                    this.OrderingGuarantee = OrderingGuarantee.No;
+                    break;
+
+                case "FIFO":
+                    this.OrderingGuarantee = OrderingGuarantee.FIFO;
+                    break;
+
+                case "TOTAL":
+                    this.OrderingGuarantee = OrderingGuarantee.Total;
+                    break;
+            }
+        }
+
+        private void ParseRouting(string[] tokens)
+        {
+            switch (tokens[1])
+            {
+                case "flooding":
+                    this.RoutingPolicy = RoutingPolicy.Flood;
+                    break;
+
+                case "filter":
+                    this.RoutingPolicy = RoutingPolicy.Filter;
+                    break;
+            }
+        }
+
+        private void ParseLogging(string[] tokens)
+        {
+            switch (tokens[1])
+            {
+                case "full":
+                    this.LoggingLevel = LoggingLevel.Full;
+                    break;
+
+                case "light":
+                    this.LoggingLevel = LoggingLevel.Light;
+                    break;
             }
         }
 
@@ -189,9 +279,9 @@ namespace PuppetMaster
                 IPuppetMaster slave = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), siteUrl);
                 slave.Ping();
                 slave.Register(siteParent, Site);
+
                 Slaves.Add(name, slave);
                 return slave;
-
             }
             catch (SocketException)
             {
@@ -200,15 +290,28 @@ namespace PuppetMaster
             }
             catch (ArgumentException)
             {
-                Console.WriteLine(@"The slave at "+name+@" already exists");
+                Console.WriteLine(@"The slave at " + name + @" already exists");
                 return null;
             }
-
         }
 
         private void DeliverLocalConfig(string processName, string processType, string processUrl)
         {
-            //throw new NotImplementedException();
+            Console.WriteLine("Running a " + processType + " at " + processUrl);
+
+            switch (processType)
+            {
+                case "broker":
+                    Broker broker = new Broker(processName, processUrl, this);
+                    LocalProcesses.Add(broker);
+                    break;
+
+                case "publisher":
+                    break;
+
+                case "subscriber":
+                    break;
+            }
         }
     }
 }

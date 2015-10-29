@@ -1,6 +1,6 @@
 ﻿namespace PuppetMaster
 {
-    partial class Form1
+    partial class InteractionForm
     {
         /// <summary>
         /// Required designer variable.
@@ -33,6 +33,9 @@
             this.IndividualButton = new System.Windows.Forms.Button();
             this.GroupButton = new System.Windows.Forms.Button();
             this.logBox = new System.Windows.Forms.RichTextBox();
+            this.label1 = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
+            this.label3 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // IndividualBox
@@ -50,6 +53,7 @@
             this.GroupBox.Size = new System.Drawing.Size(277, 255);
             this.GroupBox.TabIndex = 1;
             this.GroupBox.Text = "";
+            this.GroupBox.TextChanged += new System.EventHandler(this.GroupBox_TextChanged);
             // 
             // IndividualButton
             // 
@@ -69,27 +73,59 @@
             this.GroupButton.TabIndex = 3;
             this.GroupButton.Text = "Send";
             this.GroupButton.UseVisualStyleBackColor = true;
+            this.GroupButton.Click += new System.EventHandler(this.GroupButton_Click);
             // 
             // logBox
             // 
             this.logBox.Location = new System.Drawing.Point(416, 62);
             this.logBox.Name = "logBox";
+            this.logBox.ReadOnly = true;
             this.logBox.Size = new System.Drawing.Size(263, 430);
             this.logBox.TabIndex = 4;
             this.logBox.Text = "";
             this.logBox.TextChanged += new System.EventHandler(this.richTextBox2_TextChanged);
             // 
-            // Form1
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(29, 46);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(107, 13);
+            this.label1.TabIndex = 5;
+            this.label1.Text = "Individual Commands";
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(32, 218);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(90, 13);
+            this.label2.TabIndex = 6;
+            this.label2.Text = "Batch Commands";
+            // 
+            // label3
+            // 
+            this.label3.AutoSize = true;
+            this.label3.Location = new System.Drawing.Point(416, 46);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(25, 13);
+            this.label3.TabIndex = 7;
+            this.label3.Text = "Log";
+            // 
+            // InteractionForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(691, 526);
+            this.Controls.Add(this.label3);
+            this.Controls.Add(this.label2);
+            this.Controls.Add(this.label1);
             this.Controls.Add(this.logBox);
             this.Controls.Add(this.GroupButton);
             this.Controls.Add(this.IndividualButton);
             this.Controls.Add(this.GroupBox);
             this.Controls.Add(this.IndividualBox);
-            this.Name = "Form1";
+            this.Name = "InteractionForm";
             this.Text = "Form1";
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -103,6 +139,9 @@
         private System.Windows.Forms.Button IndividualButton;
         private System.Windows.Forms.Button GroupButton;
         private System.Windows.Forms.RichTextBox logBox;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.Label label3;
     }
 }
 

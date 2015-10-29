@@ -1,51 +1,63 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CommonTypes
 {
+    [Serializable]
     public enum LoggingLevel
     {
         Light,
         Full
     }
 
+    [Serializable]
     public enum RoutingPolicy
     {
         Flood,
         Filter
     }
 
+    [Serializable]
     public enum OrderingGuarantee
     {
         No,
-        FIFO,
+        Fifo,
         Total
     }
+
     /// <summary>
-    /// The interface for the PuppetMaster for the PuppetMaster - PuppetMasterMaster communication
+    ///     The interface for the PuppetMaster for the PuppetMaster - PuppetMasterMaster communication
     /// </summary>
-    public interface IPuppetMaster
+    public interface IPuppetMasterSlave : IPuppetMaster
     {
-        void DeliverConfig(string processName, string processType, string processUrl);
+        void LaunchProcess(string processName, string processType, string processUrl);
+        void DeliverSetting(string settingType, string settingValue);
         void DeliverCommand(string[] commandArgs);
         void SendCommand(string log);
-        void Register(string siteParent, string masterName);
+        void RegisterWithMaster(string siteParent, string masterName);
         void Ping();
     }
+
     /// <summary>
-    /// The interface for the PuppetMasterMaster for the PuppetMaster - PuppetMasterMaster communication
+    ///     The interface for the PuppetMasterMaster for the PuppetMaster - PuppetMasterMaster communication
     /// </summary>
-    public interface IPuppetMasterMaster
+    public interface IPuppetMasterMaster : IPuppetMaster
     {
         void DeliverLog(string log);
         void SendCommand(string command);
     }
 
     /// <summary>
-    /// The interface for the Process for the PuppetMaster - Process communication
+    ///     Holds the common methods between both types of PuppetMasters
+    /// </summary>
+    public interface IPuppetMaster
+    {
+        List<string> GetBrokers();
+    }
+
+    /// <summary>
+    ///     The interface for the Process for the PuppetMaster - Process communication
     /// </summary>
     public interface IProcess
     {
@@ -54,17 +66,29 @@ namespace CommonTypes
     }
 
     /// <summary>
-    /// The interface for the PuppetMaster for the PuppetMaster - Process communication
+    ///     TODO : cenas
+    /// </summary>
+    public interface IBroker : IProcess
+    {
+        void RegisterBroker(string siteName, string brokerUrl);
+        void RegisterPubSub(string procName, string procUrl);
+    }
+
+    /// <summary>
+    ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
     /// </summary>
     public interface IProcessMaster
     {
         void DeliverLogToPuppetMaster(string log);
     }
 
+    /// <summary>
+    /// A library of useful functions shared between various entities
+    /// </summary>
     public class UtilityFunctions
     {
         /// <summary>
-        /// Returns the port used for a given site
+        ///     Returns the port used for the PupperMaster at a given site
         /// </summary>
         /// <param name="siteName"> The site's name </param>
         /// <returns> The port </returns>
@@ -74,9 +98,18 @@ namespace CommonTypes
             return 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
         }
 
+        /// <summary>
+        ///     Returns the url used for the PuppetMaster at given site
+        /// </summary>
+        /// <param name="siteName"></param>
+        /// <returns></returns>
+        public static string GetUrl(string siteName)
+        {
+            return "tcp://localhost:" + GetPort(siteName) + "/" + siteName;
+        }
 
         /// <summary>
-        /// Parses the URL to extract the port and service name, if possible
+        ///     Parses the URL to extract the port and service name, if possible
         /// </summary>
         /// <param name="url"> The URL to parse </param>
         /// <param name="port"> An output parameter - the port </param>
@@ -102,7 +135,7 @@ namespace CommonTypes
             if (lastParts.Length != 2)
                 return false;
 
-            port = int.Parse(lastParts.First()); 
+            port = int.Parse(lastParts.First());
             name = lastParts.Last();
 
             return true;

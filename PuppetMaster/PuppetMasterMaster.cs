@@ -6,37 +6,21 @@ using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMasterMaster : MarshalByRefObject, IPuppetMasterMaster, IProcessMaster
+    public class PuppetMasterMaster : BasePuppet, IPuppetMasterMaster, IProcessMaster
     {
         // GUI
-        public Form1 Form { get; set; }
-        // this site's name
-        public string Site { get; }
-        // this site's parent
-        public string Parent { get; private set; }
+        public InteractionForm Form { get; set; }
         // maps a site to it's puppetMaster
-        public IDictionary<string, IPuppetMaster> Slaves { get; set; }
-        // the list of processes that run in this site
-        public List<IProcess> LocalProcesses { get; set; }
-        // the logging setting
-        public LoggingLevel LoggingLevel = LoggingLevel.Light;
-        // the ordering setting
-        public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.FIFO;
+        public IDictionary<string, IPuppetMasterSlave> Slaves { get; set; }
         // maps a process to it's site name
         public IDictionary<string, string> Processes;
-        // the routing setting
-        public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
 
         private delegate void DelegateDeliverMessage(string message);
 
-
-        public PuppetMasterMaster(string siteName)
+        public PuppetMasterMaster(string siteName) : base (siteName)
         {
-            Site = siteName;
-            Slaves = new Dictionary<string, IPuppetMaster>();
-            LocalProcesses = new List<IProcess>();
-            Processes = new Dictionary<string, string>();
-
+            Slaves = new Dictionary<string, IPuppetMasterSlave>();
+            this.Processes = new Dictionary<string, string>();
 
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
@@ -45,6 +29,8 @@ namespace PuppetMaster
             {
                 ParseConfig(line);
             }
+
+            reader.Close();
         }
 
         void IProcessMaster.DeliverLogToPuppetMaster(string log)
@@ -74,7 +60,7 @@ namespace PuppetMaster
 
             if (process.Equals("all"))
             {
-                foreach (IPuppetMaster slave in Slaves.Values)
+                foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
                     slave.DeliverCommand(args);
                 }
@@ -86,6 +72,15 @@ namespace PuppetMaster
                 Slaves[process].DeliverCommand(args);
                 //} catch()
             }
+        }
+
+        /// <summary>
+        ///     Returns every Broker at this site - used by PuppetMasters
+        /// </summary>
+        /// <returns></returns>
+        public List<string> GetBrokers()
+        {
+            return base.GetBrokers();
         }
 
         public override string ToString()
@@ -178,7 +173,9 @@ namespace PuppetMaster
             }
         }
 
-        // Each of the following functions parses a specific type of entry in the config file
+        //  Parsing functions
+        //  Each of the following functions parses a specific type of entry in the config file
+        //
         private void ParseProcess(string[] tokens)
         {
             string processUrl = tokens[7];
@@ -187,17 +184,17 @@ namespace PuppetMaster
             string siteName = tokens[5];
 
             // if the site is this site
-            if (siteName.Equals(Site))
+            if (siteName.Equals(SiteName))
             {
-                DeliverLocalConfig(processName, processType, processUrl);
+                LaunchProcess(processName, processType, processUrl);
                 return;
             }
 
             try
             {
-                IPuppetMaster slave = Slaves[siteName];
-                slave.DeliverConfig(processName, processType, processUrl);
-                Processes[processName] = siteName;
+                IPuppetMasterSlave slave = Slaves[siteName];
+                slave.LaunchProcess(processName, processType, processUrl);
+                this.Processes[processName] = siteName;
             }
             catch (KeyNotFoundException)
             {
@@ -210,8 +207,8 @@ namespace PuppetMaster
             string siteParent = tokens[3];
             string siteName = tokens[1];
 
-            if (tokens[1].Equals(Site))
-                Parent = siteParent;
+            if (tokens[1].Equals(SiteName))
+                ParentSite = siteParent;
             else
                 ConnectToSite(siteName, siteParent);
         }
@@ -225,12 +222,18 @@ namespace PuppetMaster
                     break;
 
                 case "FIFO":
-                    this.OrderingGuarantee = OrderingGuarantee.FIFO;
+                    this.OrderingGuarantee = OrderingGuarantee.Fifo;
                     break;
 
                 case "TOTAL":
                     this.OrderingGuarantee = OrderingGuarantee.Total;
                     break;
+            }
+
+            foreach (IPuppetMasterSlave slave in Slaves.Values)
+            {
+                slave.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString());
+                Console.Out.WriteLine(this.OrderingGuarantee.ToString());
             }
         }
 
@@ -246,6 +249,11 @@ namespace PuppetMaster
                     this.RoutingPolicy = RoutingPolicy.Filter;
                     break;
             }
+            foreach (IPuppetMasterSlave slave in Slaves.Values)
+            {
+                slave.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString());
+                Console.Out.WriteLine(this.RoutingPolicy.ToString());
+            }
         }
 
         private void ParseLogging(string[] tokens)
@@ -260,15 +268,21 @@ namespace PuppetMaster
                     this.LoggingLevel = LoggingLevel.Light;
                     break;
             }
+
+            foreach (IPuppetMasterSlave slave in Slaves.Values)
+            {
+                slave.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString());
+                Console.Out.WriteLine(this.LoggingLevel.ToString());
+            }
         }
 
         /// <summary>
-        ///     Connects to the puppetMaster at the specified site
+        ///     Connects to the PuppetMasterSlave at the specified site
         /// </summary>
         /// <param name="name"> The machine's name </param>
         /// <param name="siteParent"> The site's parent in the tree </param>
         /// <returns> A puppetMaster instance or null if the site is down </returns>
-        private IPuppetMaster ConnectToSite(string name, string siteParent)
+        private IPuppetMasterSlave ConnectToSite(string name, string siteParent)
         {
             string siteUrl = "tcp://localhost:" + UtilityFunctions.GetPort(name) + "/" + name;
 
@@ -276,9 +290,10 @@ namespace PuppetMaster
             {
                 Console.WriteLine("Connecting to " + siteUrl);
 
-                IPuppetMaster slave = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), siteUrl);
+                IPuppetMasterSlave slave =
+                    (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), siteUrl);
                 slave.Ping();
-                slave.Register(siteParent, Site);
+                slave.RegisterWithMaster(siteParent, SiteName);
 
                 Slaves.Add(name, slave);
                 return slave;
@@ -292,25 +307,6 @@ namespace PuppetMaster
             {
                 Console.WriteLine(@"The slave at " + name + @" already exists");
                 return null;
-            }
-        }
-
-        private void DeliverLocalConfig(string processName, string processType, string processUrl)
-        {
-            Console.WriteLine("Running a " + processType + " at " + processUrl);
-
-            switch (processType)
-            {
-                case "broker":
-                    Broker broker = new Broker(processName, processUrl, this);
-                    LocalProcesses.Add(broker);
-                    break;
-
-                case "publisher":
-                    break;
-
-                case "subscriber":
-                    break;
             }
         }
     }

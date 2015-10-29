@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 
-[assembly: AssemblyTitle("PuppetMasterSlave")]
+[assembly: AssemblyTitle("Broker")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("PuppetMasterSlave")]
+[assembly: AssemblyProduct("Broker")]
 [assembly: AssemblyCopyright("Copyright ©  2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -22,7 +22,7 @@ using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 
-[assembly: Guid("091b3f1c-4318-494f-825e-90e1964b29b9")]
+[assembly: Guid("43f36c47-04c0-473f-8819-fc0eb77a6e68")]
 
 // Version information for an assembly consists of the following four values:
 //

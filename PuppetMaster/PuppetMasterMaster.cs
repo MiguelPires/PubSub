@@ -13,14 +13,14 @@ namespace PuppetMaster
         // maps a site to it's puppetMaster
         public IDictionary<string, IPuppetMasterSlave> Slaves { get; set; }
         // maps a process to it's site name
-        public IDictionary<string, string> Processes;
+        public IDictionary<string, string> SiteProcesses;
 
         private delegate void DelegateDeliverMessage(string message);
 
         public PuppetMasterMaster(string siteName) : base (siteName)
         {
             Slaves = new Dictionary<string, IPuppetMasterSlave>();
-            this.Processes = new Dictionary<string, string>();
+            this.SiteProcesses = new Dictionary<string, string>();
 
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
@@ -45,12 +45,12 @@ namespace PuppetMaster
 
         void IPuppetMasterMaster.SendCommand(string command)
         {
-            string[] args;
-            string process;
-
+            string[] puppetArgs;
+            string processName;
             try
             {
-                process = ParseCommand(command, out args);
+                ParseCommand(command, out puppetArgs);
+                processName = puppetArgs[0];
             }
             catch (CommandParsingException e)
             {
@@ -58,19 +58,39 @@ namespace PuppetMaster
                 return;
             }
 
-            if (process.Equals("all"))
+            if (processName.Equals("all"))
             {
+                // deliver command to every remote PuppetMaster
                 foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
-                    slave.DeliverCommand(args);
+                    slave.DeliverCommand(puppetArgs);
+                }
+                
+                // deliver command to every local process
+                foreach (var proc in LocalProcesses.Values)
+                {
+                    proc.DeliverCommand(new string[] {puppetArgs[1]});
                 }
             }
             else
             {
-                /* try
-                {*/
-                Slaves[process].DeliverCommand(args);
-                //} catch()
+                // find the process's site
+                string site = SiteProcesses[processName];
+
+                if (site.Equals(SiteName))
+                {
+                    // the process doesn't need to receive it's own name (first index in puppetArgs)
+                    string[] processArgs = new string[puppetArgs.Length-1];
+                    Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
+
+                    IProcess process = LocalProcesses[processName];
+                    process.DeliverCommand(processArgs);
+                }
+                else
+                {
+                    IPuppetMasterSlave puppetMaster = Slaves[site];
+                    puppetMaster.DeliverCommand(puppetArgs);
+                }
             }
         }
 
@@ -78,7 +98,7 @@ namespace PuppetMaster
         ///     Returns every Broker at this site - used by PuppetMasters
         /// </summary>
         /// <returns></returns>
-        public List<string> GetBrokers()
+        public new List<string> GetBrokers()
         {
             return base.GetBrokers();
         }
@@ -93,46 +113,44 @@ namespace PuppetMaster
         /// </summary>
         /// <param name="command">The full command line</param>
         /// <param name="args">An output parameter with the arguments to be passed to the process, if any</param>
-        /// <returns> The process that will receive the command</returns>
-        private string ParseCommand(string command, out string[] args)
+        private void ParseCommand(string command, out string[] args)
         {
             string[] tokens = command.Split(' ');
-            string process;
-            args = new string[4];
+            args = new string[5];
             switch (tokens[0])
             {
                 case "Subscriber":
-                    process = tokens[1]; // process name
-                    args[0] = tokens[2]; // subscribe/unsubsribe
-                    args[1] = tokens[3]; // topic
+                    args[0] = tokens[1]; // process name
+                    args[1] = tokens[2]; // Subscribe/Unsubsribe
+                    args[2] = tokens[3]; // topic
                     break;
 
                 case "Publisher":
-                    process = tokens[1]; // process name
+                    args[0] = tokens[1]; // process name
                     args[0] = "Publish";
-                    args[1] = tokens[3]; // number of events
-                    args[2] = tokens[5]; // topic name
-                    args[3] = tokens[7]; // time interval (ms)
+                    args[2] = tokens[3]; // number of events
+                    args[3] = tokens[5]; // topic name
+                    args[4] = tokens[7]; // time interval (ms)
                     break;
 
                 case "Status":
-                    process = "all"; // all processes
-                    args[0] = "Status";
+                    args[0] = "all"; // process name
+                    args[1] = "Status";
                     break;
 
                 case "Crash":
-                    process = tokens[1]; // process name
-                    args[0] = "Crash";
+                    args[0] = tokens[1]; // process name
+                    args[1] = "Crash";
                     break;
 
                 case "Freeze":
-                    process = tokens[1]; // process name
-                    args[0] = "Freeze";
+                    args[0] = tokens[1]; // process name
+                    args[1] = "freeze";
                     break;
 
                 case "Unfreeze":
-                    process = tokens[1]; // process name
-                    args[0] = "Unfreeze";
+                    args[0] = tokens[1]; // process name
+                    args[1] = "Unfreeze";
                     break;
 
                 // the wait command has a different purpose, but should also be parsed
@@ -140,7 +158,6 @@ namespace PuppetMaster
                 default:
                     throw new CommandParsingException("Unknown command: " + command);
             }
-            return process;
         }
 
         /// <summary>
@@ -183,6 +200,8 @@ namespace PuppetMaster
             string processName = tokens[1];
             string siteName = tokens[5];
 
+            this.SiteProcesses[processName] = siteName;
+
             // if the site is this site
             if (siteName.Equals(SiteName))
             {
@@ -194,7 +213,6 @@ namespace PuppetMaster
             {
                 IPuppetMasterSlave slave = Slaves[siteName];
                 slave.LaunchProcess(processName, processType, processUrl);
-                this.Processes[processName] = siteName;
             }
             catch (KeyNotFoundException)
             {

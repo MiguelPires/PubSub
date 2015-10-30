@@ -1,15 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using CommonTypes;
 
 namespace Subscriber
 {
-    internal class Subscriber : BaseProcess
+    internal class Subscriber : BaseProcess, ISubscriber
     {
         // this site's brokers
         public List<IBroker> Brokers { get; set; }
 
-        public Subscriber(string processName, string processUrl, string puppetMasterUrl) : base (processName, processUrl, puppetMasterUrl)
+        public Subscriber(string processName, string processUrl, string puppetMasterUrl)
+            : base(processName, processUrl, puppetMasterUrl)
         {
             Brokers = new List<IBroker>();
 
@@ -22,21 +24,35 @@ namespace Subscriber
                 parentBroker.RegisterPubSub(ProcessName, Url);
                 Brokers.Add(parentBroker);
             }
-            }
-
-        public override string ToString()
-        {
-            return "Subscriber";
         }
 
         public override void DeliverCommand(string[] command)
         {
+            string complete = string.Join(" ", command);
+            Console.Out.WriteLine("Received command: " + complete);
+
+            switch (command[0])
+            {
+                // generic commands
+                case "Status":
+                case "Crash":
+                case "Freeze":
+                case "Unfreeze":
+                    base.DeliverCommand(command);
+                    break;
+
+                // subscriber specific commands
+            }
+        }
+
+        void ISubscriber.DeliverPublication(string publication)
+        {
             throw new NotImplementedException();
         }
 
-        public override void SendLog(string log)
+        public override string ToString()
         {
-            throw new NotImplementedException();
+            return "Subscriber";
         }
     }
 }

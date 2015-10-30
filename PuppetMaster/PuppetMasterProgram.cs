@@ -27,7 +27,7 @@ namespace PuppetMaster
 
         private static void InitializePuppetMasterSlave(string siteName)
         {
-            PuppetMasterSlaveSlave puppet = new PuppetMasterSlaveSlave(siteName);
+            PuppetMasterSlave puppet = new PuppetMasterSlave(siteName);
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 

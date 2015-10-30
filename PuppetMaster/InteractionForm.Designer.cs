@@ -126,7 +126,7 @@
             this.Controls.Add(this.GroupBox);
             this.Controls.Add(this.IndividualBox);
             this.Name = "InteractionForm";
-            this.Text = "Form1";
+            this.Text = "Interaction Form";
             this.ResumeLayout(false);
             this.PerformLayout();
 

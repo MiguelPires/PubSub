@@ -26,6 +26,12 @@ namespace CommonTypes
         Total
     }
 
+    public enum Status
+    {
+        Unfrozen,
+        Frozen
+    }
+
     /// <summary>
     ///     The interface for the PuppetMaster for the PuppetMaster - PuppetMasterMaster communication
     /// </summary>
@@ -34,7 +40,7 @@ namespace CommonTypes
         void LaunchProcess(string processName, string processType, string processUrl);
         void DeliverSetting(string settingType, string settingValue);
         void DeliverCommand(string[] commandArgs);
-        void SendCommand(string log);
+        void SendLog(string log);
         void RegisterWithMaster(string siteParent, string masterName);
         void Ping();
     }
@@ -66,13 +72,26 @@ namespace CommonTypes
     }
 
     /// <summary>
-    ///     TODO : cenas
+    ///     The interface for the Brokers
     /// </summary>
     public interface IBroker : IProcess
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
+        void DeliverSubscription(string procName, string topic);
+        void DeliverPublication(string topic, string publication);
     }
+
+    public interface IPublisher : IProcess
+    {
+        void SendPublication(string publication);
+    }
+
+    public interface ISubscriber : IProcess
+    {
+        void DeliverPublication(string publication);
+    }
+
 
     /// <summary>
     ///     The interface for the PuppetMaster for the PuppetMaster - Process communication

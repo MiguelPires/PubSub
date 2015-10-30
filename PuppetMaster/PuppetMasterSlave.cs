@@ -3,18 +3,19 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.Hosting;
 using System.Security.Policy;
+using System.Threading;
 using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMasterSlaveSlave : BasePuppet, IPuppetMasterSlave, IProcessMaster
+    public class PuppetMasterSlave : BasePuppet, IPuppetMasterSlave, IProcessMaster
     {
         // GUI
         public LoggingForm Form { get; set; }
         // the PuppetMasterMaster object
         public IPuppetMasterMaster Master { get; private set; }
 
-        public PuppetMasterSlaveSlave(string siteName) : base (siteName)
+        public PuppetMasterSlave(string siteName) : base (siteName)
         {
             LocalProcesses = new Dictionary<string, IProcess>();
         }
@@ -84,15 +85,30 @@ namespace PuppetMaster
 
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
-            throw new NotImplementedException();
+            string processName = commandArgs[0];
+            if (processName.Equals("all"))
+            {
+                foreach (var proc in LocalProcesses.Values)
+                {
+                    // the process doesn't need to receive it's own name (first index in commandArgs)
+                    proc.DeliverCommand(new string[1] {commandArgs[1]});
+                }
+            }
+            else
+            {
+                IProcess process = LocalProcesses[processName];
+                Thread thread = new Thread(() => process.DeliverCommand(commandArgs));
+                thread.Start(commandArgs);
+            }
+
         }
 
-        void IPuppetMasterSlave.SendCommand(string log)
+        void IPuppetMasterSlave.SendLog(string log)
         {
             if (!string.IsNullOrEmpty(log))
                 Master.DeliverLog(log);
             else
-                Console.WriteLine(@"Problem - SendCommand: The log line shouldn't be empty");
+                Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");
         }
 
         /// <summary>
@@ -111,7 +127,7 @@ namespace PuppetMaster
         /// Returns every Broker at this site - user by brokers to connect to the parent site's brokers
         /// </summary>
         /// <returns></returns>
-        public List<string> GetBrokers()
+        public new List<string> GetBrokers()
         {
             return base.GetBrokers();
         }

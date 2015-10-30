@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Remoting;
 using System.Text;
@@ -15,8 +16,10 @@ namespace CommonTypes
         public string Url { get; }
         // public string PuppetMasterUrl { get; }
         public IProcessMaster PuppetMaster { get; private set; }
+        // system status (frozen, unfrozen)
+        public Status Status { get; protected set; }
 
-        public BaseProcess(string processName, string processUrl, string puppetMasterUrl)
+        protected BaseProcess(string processName, string processUrl, string puppetMasterUrl)
         {
             ProcessName = processName;
             Url = processUrl;
@@ -42,9 +45,8 @@ namespace CommonTypes
                 // obtains the broker urls at that site - these urls are probably going to be stored for reconnection later
                 brokerUrls = puppetMasterSlave.GetBrokers();
             }
-            catch (RemotingException e)
+            catch (RemotingException)
             {
-                Console.Out.WriteLine("URL: "+puppetMasterUrl);
                 IPuppetMasterMaster newPuppetMaster =
                     (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), puppetMasterUrl);
                 brokerUrls = newPuppetMaster.GetBrokers();
@@ -52,8 +54,35 @@ namespace CommonTypes
             return brokerUrls;
         }
 
-        public abstract void DeliverCommand(string[] command);
-        public abstract void SendLog(string log);
+        public virtual void DeliverCommand(string[] command)
+        {
+            switch (command[0])
+            {
+                case "Status":
+                    Console.Out.WriteLine("Printing status information:\r\nSubscriptions, etc...");
+                    break;
+
+                case "Crash":
+                    Console.WriteLine("Crashing");
+                    Process.GetCurrentProcess().Kill();
+                    break;
+
+                case "Freeze":
+                    Console.Out.WriteLine("Freezing");
+                    Status = Status.Frozen;
+                    break;
+
+                case "Unfreeze":
+                    Console.Out.WriteLine("Unfreezing");
+                    Status = Status.Unfrozen;
+                    break;
+            }
+        }
+
+        void IProcess.SendLog(string log)
+        {
+            throw new NotImplementedException();
+        }
 
         public override object InitializeLifetimeService()
         {

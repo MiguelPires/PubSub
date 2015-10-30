@@ -60,7 +60,7 @@
             this.Controls.Add(this.label1);
             this.Controls.Add(this.LogBox);
             this.Name = "LoggingForm";
-            this.Text = "LoggingForm";
+            this.Text = "Logging Form";
             this.ResumeLayout(false);
             this.PerformLayout();
 

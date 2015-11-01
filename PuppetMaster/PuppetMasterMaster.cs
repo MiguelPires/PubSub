@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Sockets;
 using CommonTypes;
 
+
 namespace PuppetMaster
 {
     public class PuppetMasterMaster : BasePuppet, IPuppetMasterMaster, IProcessMaster
@@ -76,13 +77,16 @@ namespace PuppetMaster
             {
                 // find the process's site
                 string site = SiteProcesses[processName];
-
+                if (site == null)
+                {
+                    Console.Out.WriteLine("Process name "+processName + " is not registered in the SiteProcesses hashtable.");
+                    return;
+                }
                 if (site.Equals(SiteName))
                 {
                     // the process doesn't need to receive it's own name (first index in puppetArgs)
                     string[] processArgs = new string[puppetArgs.Length-1];
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
-
                     IProcess process = LocalProcesses[processName];
                     process.DeliverCommand(processArgs);
                 }
@@ -145,7 +149,7 @@ namespace PuppetMaster
 
                 case "Freeze":
                     args[0] = tokens[1]; // process name
-                    args[1] = "freeze";
+                    args[1] = "Freeze"; //*f* estava freeze capslock
                     break;
 
                 case "Unfreeze":

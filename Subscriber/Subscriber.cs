@@ -24,6 +24,7 @@ namespace Subscriber
                 parentBroker.RegisterPubSub(ProcessName, Url);
                 Brokers.Add(parentBroker);
             }
+            
         }
 
         public override void DeliverCommand(string[] command)
@@ -31,16 +32,33 @@ namespace Subscriber
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
 
-            switch (command[0])
+            if (Status==Status.Frozen)
+            {
+                Console.Out.WriteLine("watashi wa furozen desu!");
+                return;
+            }
+            if (Status == Status.Unfrozen)
+            {
+                Console.Out.WriteLine("nani desu ka?");
+            }
+            switch (command[1])
             {
                 // generic commands
                 case "Status":
+                    base.DeliverCommand(command);
+                    break;
                 case "Crash":
+                    base.DeliverCommand(command);
+                    break;
                 case "Freeze":
+                    base.DeliverCommand(command);
+                    break;
                 case "Unfreeze":
                     base.DeliverCommand(command);
                     break;
-
+                default:
+                    Console.Out.WriteLine("Command: " + command[1] + " doesn't exist!");
+                    break;
                 // subscriber specific commands
             }
         }

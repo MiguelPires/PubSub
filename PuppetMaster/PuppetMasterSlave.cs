@@ -85,6 +85,7 @@ namespace PuppetMaster
 
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
+            
             string processName = commandArgs[0];
             if (processName.Equals("all"))
             {
@@ -98,7 +99,7 @@ namespace PuppetMaster
             {
                 IProcess process = LocalProcesses[processName];
                 Thread thread = new Thread(() => process.DeliverCommand(commandArgs));
-                thread.Start(commandArgs);
+                thread.Start(); //thread.Start(commandArgs); *f*
             }
 
         }

@@ -33,7 +33,6 @@ namespace PuppetMaster
         {
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
-
             this.master.SendCommand(this.IndividualBox.Text);
             this.IndividualBox.Clear();
         }

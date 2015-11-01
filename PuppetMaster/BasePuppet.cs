@@ -62,7 +62,7 @@ namespace PuppetMaster
         protected void LaunchProcess(string processName, string processType, string processUrl)
         {
             Console.WriteLine("Launching " + processName);
-
+           
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 UseShellExecute = true,

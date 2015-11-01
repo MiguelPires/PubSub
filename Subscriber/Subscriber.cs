@@ -37,11 +37,7 @@ namespace Subscriber
                 Console.Out.WriteLine("watashi wa furozen desu!");
                 return;
             }
-            if (Status == Status.Unfrozen)
-            {
-                Console.Out.WriteLine("nani desu ka?");
-            }
-            switch (command[1])
+            switch (command[0])
             {
                 // generic commands
                 case "Status":
@@ -57,7 +53,7 @@ namespace Subscriber
                     base.DeliverCommand(command);
                     break;
                 default:
-                    Console.Out.WriteLine("Command: " + command[1] + " doesn't exist!");
+                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
                 // subscriber specific commands
             }

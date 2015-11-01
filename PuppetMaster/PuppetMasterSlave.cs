@@ -97,8 +97,9 @@ namespace PuppetMaster
             }
             else
             {
+                //it doesn't need to receive it's own name here as well..
                 IProcess process = LocalProcesses[processName];
-                Thread thread = new Thread(() => process.DeliverCommand(commandArgs));
+                Thread thread = new Thread(() => process.DeliverCommand(new string[1] {commandArgs[1]}));//process.DeliverCommand(commandArgs));
                 thread.Start(); //thread.Start(commandArgs); *f*
             }
 

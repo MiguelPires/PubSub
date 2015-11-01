@@ -33,8 +33,14 @@ namespace Publisher
             {
                 // generic commands
                 case "Status":
+                    base.DeliverCommand(command);
+                    break;
                 case "Crash":
+                    base.DeliverCommand(command);
+                    break;
                 case "Freeze":
+                    base.DeliverCommand(command);
+                    break;
                 case "Unfreeze":
                     base.DeliverCommand(command);
                     break;

@@ -56,7 +56,7 @@ namespace CommonTypes
 
         public virtual void DeliverCommand(string[] command)
         {
-            switch (command[1])
+            switch (command[0])
             {
                 case "Status":
                     Console.Out.WriteLine("Printing status information:\r\nSubscriptions, etc...");

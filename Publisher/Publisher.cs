@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using CommonTypes;
 
 namespace Publisher
@@ -23,12 +24,31 @@ namespace Publisher
                 Brokers.Add(parentBroker);
             }
         }
+        public override void ProcessFrozenListCommands()
+        {
+            base.ProcessFrozenListCommands();
+            foreach (String[] command in FrozenStateList)
+            {
+                switch (command[0])
+                {
+                    case "Publish":
+                        //string topic = command[1];
+                        //subscribe to topic
+                        break;
+                }
+            }
+        }
 
         public override void DeliverCommand(string[] command)
         {
+            if (Status == Status.Frozen)
+            {
+                base.DeliverCommand(command);
+                return;
+            }
+
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
-
             switch (command[0])
             {
                 // generic commands
@@ -44,8 +64,35 @@ namespace Publisher
                 case "Unfreeze":
                     base.DeliverCommand(command);
                     break;
+                case "Publish":
+                    var numberOfEvents = 0;
 
-               // publisher specific commands
+                    if ( !(int.TryParse(command[1], out numberOfEvents)))
+                    {
+                        // Parsing was not successful..
+                        Console.Out.WriteLine("int parse failed (numberOfEvents)");
+                        return;
+                    }
+                    var topic = command[3];
+                    var timeInterval = 0;
+                    if (!(int.TryParse(command[5], out timeInterval)))
+                    {
+                        // Parsing was not successful..
+                        Console.Out.WriteLine("int parse failed (timeInterval)");
+                        return;
+                    }
+                    for (int i = 0; i < numberOfEvents; i++)
+                    {
+                        string content = ProcessName + i;
+                       // sendPublication(topic,content);
+                        System.Threading.Thread.Sleep(timeInterval);
+                    }
+                    break;
+
+                default:
+                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                    break;
+                    // subscriber specific commands
             }
         }
 

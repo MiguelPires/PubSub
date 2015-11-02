@@ -20,23 +20,40 @@ namespace Subscriber
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
-                IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
+                IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), brokerUrl);
                 parentBroker.RegisterPubSub(ProcessName, Url);
                 Brokers.Add(parentBroker);
             }
-            
+
+        }
+        public override void ProcessFrozenListCommands()
+        {
+            base.ProcessFrozenListCommands();
+            foreach (String[] command in FrozenStateList)
+            {
+                switch (command[0])
+                {
+                    case "Subscribe":
+                        //string topic = command[1];
+                        //subscribe to topic
+                        break;
+                    case "Unsubscribe":
+                        //string topic = command[1];
+                        //Unsubscribe from topic
+                        break;
+                }
+            }
         }
 
         public override void DeliverCommand(string[] command)
         {
-            string complete = string.Join(" ", command);
-            Console.Out.WriteLine("Received command: " + complete);
-
-            if (Status==Status.Frozen)
+            if (Status == Status.Frozen)
             {
-                Console.Out.WriteLine("watashi wa furozen desu!");
+                base.DeliverCommand(command);
                 return;
             }
+            string complete = string.Join(" ", command);
+            Console.Out.WriteLine("Received command: " + complete);
             switch (command[0])
             {
                 // generic commands
@@ -52,10 +69,19 @@ namespace Subscriber
                 case "Unfreeze":
                     base.DeliverCommand(command);
                     break;
+                case "Subscribe":
+                    //string topic = command[1];
+                    //subscribe to topic
+                    break;
+                case "Unsubscribe":
+                    //string topic = command[1];
+                    //Unsubscribe from topic
+                    break;
+
                 default:
                     Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
-                // subscriber specific commands
+                    // subscriber specific commands
             }
         }
 
@@ -68,5 +94,12 @@ namespace Subscriber
         {
             return "Subscriber";
         }
+    }
+
+    public enum ProcessType
+    {
+        Broker,
+        Publisher,
+        Subscriber
     }
 }

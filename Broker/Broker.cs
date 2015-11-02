@@ -99,22 +99,36 @@ namespace Broker
             }
         }
 
+
         public override void DeliverCommand(string[] command)
         {
+            if (Status == Status.Frozen)
+            {
+                base.DeliverCommand(command);
+                return;
+            }
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
-
             switch (command[0])
             {
                 // generic commands
                 case "Status":
+                    base.DeliverCommand(command);
+                    break;
                 case "Crash":
+                    base.DeliverCommand(command);
+                    break;
                 case "Freeze":
+                    base.DeliverCommand(command);
+                    break;
                 case "Unfreeze":
                     base.DeliverCommand(command);
                     break;
 
-                // broker specific command
+                default:
+                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                    break;
+                    // subscriber specific commands
             }
         }
 

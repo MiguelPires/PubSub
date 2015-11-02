@@ -98,8 +98,10 @@ namespace PuppetMaster
             else
             {
                 //it doesn't need to receive it's own name here as well..
+                string[] processArgs = new string[commandArgs.Length - 1];
+                Array.Copy(commandArgs, 1, processArgs, 0, commandArgs.Length - 1);
                 IProcess process = LocalProcesses[processName];
-                Thread thread = new Thread(() => process.DeliverCommand(new string[1] {commandArgs[1]}));//process.DeliverCommand(commandArgs));
+                Thread thread = new Thread(() => process.DeliverCommand(processArgs));//process.DeliverCommand(commandArgs));
                 thread.Start(); //thread.Start(commandArgs); *f*
             }
 

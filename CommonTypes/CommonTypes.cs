@@ -42,7 +42,6 @@ namespace CommonTypes
         void DeliverCommand(string[] commandArgs);
         void SendLog(string log);
         void RegisterWithMaster(string siteParent, string masterName);
-        void Ping();
     }
 
     /// <summary>
@@ -60,6 +59,10 @@ namespace CommonTypes
     public interface IPuppetMaster
     {
         List<string> GetBrokers();
+        void Ping();
+        RoutingPolicy GetRoutingPolicy();
+        LoggingLevel GetLoggingLevel();
+        OrderingGuarantee GetOrderingGuarantee();
     }
 
     /// <summary>
@@ -67,8 +70,17 @@ namespace CommonTypes
     /// </summary>
     public interface IProcess
     {
+        void DeliverSetting(string settingType, string settingValue);
         void DeliverCommand(string[] command);
         void SendLog(string log);
+    }
+
+    /// <summary>
+    ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
+    /// </summary>
+    public interface IProcessMaster
+    {
+        void DeliverLogToPuppetMaster(string log);
     }
 
     /// <summary>
@@ -78,7 +90,7 @@ namespace CommonTypes
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
-        void DeliverSubscription(string procName, string topic);
+        void DeliverSubscription(string processName, string topic);
         void DeliverPublication(string topic, string publication);
     }
 
@@ -90,14 +102,6 @@ namespace CommonTypes
     public interface ISubscriber : IProcess
     {
         void DeliverPublication(string publication);
-    }
-
-    /// <summary>
-    ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
-    /// </summary>
-    public interface IProcessMaster
-    {
-        void DeliverLogToPuppetMaster(string log);
     }
 
     /// <summary>

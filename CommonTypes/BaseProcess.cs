@@ -16,19 +16,30 @@ namespace CommonTypes
         // this broker's url
         public string Url { get; }
         // public string PuppetMasterUrl { get; }
-        public IProcessMaster PuppetMaster { get; private set; }
+        public IPuppetMaster PuppetMaster { get; private set; }
         // system status (frozen, unfrozen)
         public Status Status { get; protected set; }
-        //List of actions saved when process state is frozen
+        // a queue of actions saved when process state is frozen (events that are yet to be processed)
         public ConcurrentQueue<String[]> EventBacklog { get; set; }
+        // the logging setting
+        public LoggingLevel LoggingLevel = LoggingLevel.Light;
+        // the ordering setting
+        public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.Fifo;
+        // the routing setting
+        public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
 
         protected BaseProcess(string processName, string processUrl, string puppetMasterUrl)
         {
             ProcessName = processName;
             Url = processUrl;
-            // connects to this site's puppetMaster
-            PuppetMaster = (IProcessMaster)Activator.GetObject(typeof(IProcessMaster), puppetMasterUrl);
             EventBacklog = new ConcurrentQueue<string[]>();
+
+            // connects to this site's puppetMaster
+            ConnectToPuppetMaster(puppetMasterUrl);
+
+            LoggingLevel = PuppetMaster.GetLoggingLevel();
+            OrderingGuarantee = PuppetMaster.GetOrderingGuarantee();
+            RoutingPolicy = PuppetMaster.GetRoutingPolicy();
         }
 
         /// <summary>
@@ -58,7 +69,24 @@ namespace CommonTypes
             return brokerUrls;
         }
 
-        public virtual void DeliverCommand(string[] command)
+        private void ConnectToPuppetMaster(string puppetMasterUrl)
+        {
+            // connects to the specified site's puppetMaster
+            PuppetMaster = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), puppetMasterUrl);
+
+            List<string> brokerUrls;
+            try
+            {
+                PuppetMaster.Ping();
+            }
+            catch (RemotingException)
+            {
+                PuppetMaster =
+                    (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), puppetMasterUrl);
+                PuppetMaster.Ping();
+            }
+        }
+       public virtual void DeliverCommand(string[] command)
         {
             if (Status == Status.Frozen)
             {
@@ -115,6 +143,51 @@ namespace CommonTypes
             throw new NotImplementedException();
         }
 
+        void IProcess.DeliverSetting(string settingType, string settingValue)
+        {
+            switch (settingType)
+            {
+                case "RoutingPolicy":
+                    if (settingValue.Equals("Flood"))
+                        this.RoutingPolicy = RoutingPolicy.Flood;
+                    else if (settingValue.Equals("Filter"))
+                        this.RoutingPolicy = RoutingPolicy.Filter;
+                    else
+                    {
+                        Console.Out.WriteLine("Unkown setting for Routing Policy");
+                        return;
+                    }
+
+                    break;
+
+                case "LoggingLevel":
+                    if (settingValue.Equals("Full"))
+                        this.LoggingLevel = LoggingLevel.Full;
+                    else if (settingValue.Equals("Light"))
+                        this.LoggingLevel = LoggingLevel.Light;
+                    else
+                    {
+                        Console.Out.WriteLine("Unkown setting for Logging Level");
+                        return;
+                    }
+                    break;
+
+                case "OrderingGuarantee":
+                    if (settingValue.Equals("No"))
+                        this.OrderingGuarantee = OrderingGuarantee.No;
+                    else if (settingValue.Equals("Fifo"))
+                        this.OrderingGuarantee = OrderingGuarantee.Fifo;
+                    else if (settingValue.Equals("Total"))
+                        this.OrderingGuarantee = OrderingGuarantee.Total;
+                    else
+                    {
+                        Console.Out.WriteLine("Unknown setting for Ordering Guarantee");
+                        return;
+                    }
+                    break;
+            }
+            Console.Out.WriteLine(settingType + " set to " + settingValue);
+        }
         public override object InitializeLifetimeService()
         {
             return null;

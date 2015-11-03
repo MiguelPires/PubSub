@@ -15,8 +15,8 @@ namespace Broker
         public IDictionary<string, IProcess> LocalProcesses { get; }
         // this site's name
         public string SiteName { get; set; }
-        // a thread-safe queue with the event backlog (events that are yet to be processed)
-        public ConcurrentQueue<string[]> Backlog { get; private set; }
+        // a table that maps subscriptions to local processes
+        public IDictionary<string, string> Subscriptions { get; private set; }
 
         public Broker(string name, string url, string puppetMasterUrl, string siteName, string parentSite)
             : base(name, url, puppetMasterUrl)
@@ -27,7 +27,6 @@ namespace Broker
             Children = new ConcurrentDictionary<string, List<IBroker>>();
             LocalProcesses = new ConcurrentDictionary<string, IProcess>();
             ParentBrokers = new List<IBroker>();
-            Backlog = new ConcurrentQueue<string[]>();
 
             if (parentSite.Equals("none"))
                 return;
@@ -69,22 +68,29 @@ namespace Broker
             LocalProcesses[procName] = (IProcess) Activator.GetObject(typeof (IProcess), procUrl);
         }
 
-        void IBroker.DeliverSubscription(string procName, string topic)
+        public void DeliverSubscription(string processName, string topic)
         {
             if (Status.Equals(Status.Frozen))
             {
                 string[] eventMessage = new string[4];
                 eventMessage[0] = "DeliverSubscription";
-                eventMessage[1] = procName;
+                eventMessage[1] = processName;
                 eventMessage[2] = topic;
             }
             else
             {
+              /*  if (RoutingPolicy == RoutingPolicy.Flood)
+                {
+                    foreach (var VARIABLE in COLLECTION)
+                    {
+                        
+                    }
+                }*/
                 Console.Out.WriteLine("Deliver subscription");
             }
         }
 
-        void IBroker.DeliverPublication(string topic, string publication)
+        public void DeliverPublication(string topic, string publication)
         {
             if (Status.Equals(Status.Frozen))
             {
@@ -108,6 +114,24 @@ namespace Broker
             }
         }
 
+        private void ProcessInternalCommand(string[] command)
+        {
+            switch (command[0])
+            {
+                case "DeliverPublication":
+                    DeliverPublication(command[1], command[2]);
+                    break;
+
+                case "DeliverSubscription":
+                    DeliverSubscription(command[1], command[2]);
+                    break;
+
+                default:
+                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                    break;
+            }
+        }
+
         public override void DeliverCommand(string[] command)
         {
             if (Status == Status.Frozen)
@@ -115,6 +139,7 @@ namespace Broker
                 base.DeliverCommand(command);
                 return;
             }
+
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
             switch (command[0])
@@ -134,7 +159,7 @@ namespace Broker
                     break;
 
                 default:
-                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                    ProcessInternalCommand(command);
                     break;
                     // subscriber specific commands
             }

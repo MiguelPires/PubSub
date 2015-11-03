@@ -99,6 +99,7 @@ namespace PuppetMaster
             Process.Start(startInfo);
             LocalProcesses[processName] = (IProcess) Activator.GetObject(typeof (IProcess), processUrl);
             LocalProcessesUrls[processName] = processUrl;
+
         }
 
         public override object InitializeLifetimeService()

@@ -113,6 +113,10 @@ namespace PuppetMaster
             return base.GetBrokers();
         }
 
+        public void Ping()
+        {
+        }
+
         public override string ToString()
         {
             return "PuppetMasterMaster";
@@ -336,6 +340,21 @@ namespace PuppetMaster
                 Console.WriteLine(@"The slave at " + name + @" already exists");
                 return null;
             }
+        }
+
+        public RoutingPolicy GetRoutingPolicy()
+        {
+            return RoutingPolicy;
+        }
+
+        public LoggingLevel GetLoggingLevel()
+        {
+            return LoggingLevel;
+        }
+
+        public OrderingGuarantee GetOrderingGuarantee()
+        {
+            return OrderingGuarantee;
         }
     }
 }

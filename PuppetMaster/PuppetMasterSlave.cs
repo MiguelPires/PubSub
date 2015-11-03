@@ -104,6 +104,7 @@ namespace PuppetMaster
                 Thread thread = new Thread(() => process.DeliverCommand(processArgs));
                 thread.Start();
             }
+
         }
 
         void IPuppetMasterSlave.SendLog(string log)
@@ -126,6 +127,7 @@ namespace PuppetMaster
             Master = (IPuppetMasterMaster) Activator.GetObject(typeof (IPuppetMasterMaster), url);
         }
 
+
         /// <summary>
         /// Returns every Broker at this site - user by brokers to connect to the parent site's brokers
         /// </summary>
@@ -133,6 +135,21 @@ namespace PuppetMaster
         public new List<string> GetBrokers()
         {
             return base.GetBrokers();
+        }
+
+        public RoutingPolicy GetRoutingPolicy()
+        {
+            return RoutingPolicy;
+        }
+
+        public LoggingLevel GetLoggingLevel()
+        {
+            return LoggingLevel;
+        }
+
+        public OrderingGuarantee GetOrderingGuarantee()
+        {
+            return OrderingGuarantee;
         }
 
         /// <summary>
@@ -147,5 +164,7 @@ namespace PuppetMaster
         {
             return "PuppetMasterSlave";
         }
+
+        
     }
 }

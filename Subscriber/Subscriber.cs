@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using CommonTypes;
 
 namespace Subscriber
@@ -9,6 +10,10 @@ namespace Subscriber
     {
         // this site's brokers
         public List<IBroker> Brokers { get; set; }
+        // the sequence number used by messages sent to the broker group
+        public int OutSequenceNumber { get; private set; }
+        // the sequence number used by messages received by the broker group
+        public int InSequenceNumber { get; private set; }
 
         public Subscriber(string processName, string processUrl, string puppetMasterUrl)
             : base(processName, processUrl, puppetMasterUrl)
@@ -24,6 +29,7 @@ namespace Subscriber
                 parentBroker.RegisterPubSub(ProcessName, Url);
                 Brokers.Add(parentBroker);
             }
+
 
         }
 
@@ -62,9 +68,10 @@ namespace Subscriber
                     break;
 
                 case "Subscribe":
-                    //string topic = command[1];
-                    //subscribe to topic
+                    string topic = command[1];
+                    SendSubscription(topic);
                     break;
+
                 case "Unsubscribe":
                     //string topic = command[1];
                     //Unsubscribe from topic
@@ -77,9 +84,23 @@ namespace Subscriber
             }
         }
 
-        void ISubscriber.DeliverPublication(string publication)
+        void ISubscriber.DeliverPublication(string publication, int sequenceNumber)
         {
             throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// This method sends a subscription to a random broker at this site
+        /// </summary>
+        /// <param name="topic"> The topic of the subscription </param>
+        private void SendSubscription(string topic)
+        {
+            ++OutSequenceNumber;
+           // picks a random broker for load-balancing purposes
+            Random rand = new Random();
+            int brokerIndex = rand.Next(0, Brokers.Count);
+            Thread thread = new Thread(() => Brokers[brokerIndex].DeliverSubscription(this.ProcessName, topic, OutSequenceNumber));
+            thread.Start();
         }
 
         public override string ToString()

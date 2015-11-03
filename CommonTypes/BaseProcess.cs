@@ -49,7 +49,7 @@ namespace CommonTypes
         /// <returns></returns>
         public List<string> GetBrokers(string puppetMasterUrl)
         {
-            //TODO: implementar uma clausula para os processos nao estoirarem
+            // TODO: Refactor this 
 
             // connects to the specified site's puppetMaster
             IPuppetMasterSlave puppetMasterSlave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), puppetMasterUrl);
@@ -74,7 +74,6 @@ namespace CommonTypes
             // connects to the specified site's puppetMaster
             PuppetMaster = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), puppetMasterUrl);
 
-            List<string> brokerUrls;
             try
             {
                 PuppetMaster.Ping();

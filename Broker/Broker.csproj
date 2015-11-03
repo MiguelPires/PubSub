@@ -52,7 +52,9 @@
   <ItemGroup>
     <Compile Include="Broker.cs" />
     <Compile Include="BrokerProgram.cs" />
+    <Compile Include="CommandQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SubscriptionSet.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

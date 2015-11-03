@@ -127,7 +127,7 @@ namespace PuppetMaster
         /// </summary>
         /// <param name="command">The full command line</param>
         /// <param name="args">An output parameter with the arguments to be passed to the process, if any</param>
-        private void ParseCommand(string command, out string[] args)
+        private static void ParseCommand(string command, out string[] args)
         {
             string[] tokens = command.Split(' ');
             args = new string[5];

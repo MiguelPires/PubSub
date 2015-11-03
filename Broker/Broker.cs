@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.Remoting.Channels;
+using System.Threading;
 using CommonTypes;
 
 namespace Broker
@@ -16,7 +18,15 @@ namespace Broker
         // this site's name
         public string SiteName { get; set; }
         // a table that maps subscriptions to local processes
-        public IDictionary<string, string> Subscriptions { get; private set; }
+        public IDictionary<string, List<string>> LocalSubscriptions { get; private set; }
+        // a table that maps subscriptions to other brokers
+        public IDictionary<string, SubscriptionSet> RoutingTable { get; private set; }
+        // the sequence number for messages received by other processes
+        public IDictionary<string, int> InSequenceNumbers { get; private set; }
+        // the sequence number for messages sent to other processes
+        public IDictionary<string, int> OutSequenceNumbers { get; private set; }
+        // maps a process/group to it's queue of held back commands
+        public IDictionary<string, CommandQueue> HoldbackQueue { get; private set; }
 
         public Broker(string name, string url, string puppetMasterUrl, string siteName, string parentSite)
             : base(name, url, puppetMasterUrl)
@@ -24,9 +34,12 @@ namespace Broker
             SiteName = siteName;
 
             // initialize state
-            Children = new ConcurrentDictionary<string, List<IBroker>>();
-            LocalProcesses = new ConcurrentDictionary<string, IProcess>();
+            Children = new Dictionary<string, List<IBroker>>();
+            LocalProcesses = new Dictionary<string, IProcess>();
             ParentBrokers = new List<IBroker>();
+            LocalSubscriptions = new Dictionary<string, List<string>>();
+            RoutingTable = new Dictionary<string, SubscriptionSet>();
+            HoldbackQueue = new Dictionary<string, CommandQueue>();
 
             if (parentSite.Equals("none"))
                 return;
@@ -58,6 +71,7 @@ namespace Broker
 
             siteBrokers.Add((IBroker) Activator.GetObject(typeof (IBroker), brokerUrl));
             Children[siteName] = siteBrokers;
+            OutSequenceNumbers[siteName] = 0;
         }
 
         public void RegisterPubSub(string procName, string procUrl)
@@ -66,31 +80,124 @@ namespace Broker
                 Console.WriteLine("There already is a process named " + procName + " at this broker (replaced anyway)");
 
             LocalProcesses[procName] = (IProcess) Activator.GetObject(typeof (IProcess), procUrl);
+            OutSequenceNumbers[procName] = 0;
         }
 
-        public void DeliverSubscription(string processName, string topic)
+        public void DeliverSubscription(string origin, string topic, int sequenceNumber)
         {
             if (Status.Equals(Status.Frozen))
             {
                 string[] eventMessage = new string[4];
                 eventMessage[0] = "DeliverSubscription";
-                eventMessage[1] = processName;
+                eventMessage[1] = origin;
                 eventMessage[2] = topic;
+                eventMessage[3] = sequenceNumber.ToString();
+            } else if (sequenceNumber > InSequenceNumbers[origin] + 1)
+            {
+                string[] eventMessage = new string[4];
+                eventMessage[0] = "DeliverSubscription";
+                eventMessage[1] = origin;
+                eventMessage[2] = topic;
+                eventMessage[3] = sequenceNumber.ToString();
+
+                CommandQueue queue;
+
+                if (HoldbackQueue.TryGetValue(origin, out queue))
+                {
+                    queue.AddCommand(eventMessage, sequenceNumber);
+                }
+                else
+                {
+                    queue = new CommandQueue();      
+                    queue.AddCommand(eventMessage, sequenceNumber);
+                    HoldbackQueue[origin] = queue;
+                }
             }
             else
             {
-              /*  if (RoutingPolicy == RoutingPolicy.Flood)
+                Console.Out.WriteLine("Receiving subscription on topic "+topic+" from  "+origin);
+             
+                // if the process is local
+                if (LocalProcesses.Keys.Contains(origin))
                 {
-                    foreach (var VARIABLE in COLLECTION)
+
+                    // add process to the local subscriptions
+                    List<string> processes;
+                    if (LocalSubscriptions.TryGetValue(topic, out processes))
+                        LocalSubscriptions[topic].Add(origin);
+                    else
+                        LocalSubscriptions[topic] = new List<string>() {origin};
+
+                    Console.Out.WriteLine("Local subscription");
+
+                }
+                else
+                {
+                    Console.Out.WriteLine("Remote subscription");
+                    // get or create the SubscriptionSet for this topic
+                    SubscriptionSet subscriptionSet;
+                    try
                     {
-                        
+                        subscriptionSet = RoutingTable[topic];
                     }
-                }*/
-                Console.Out.WriteLine("Deliver subscription");
+                    catch (KeyNotFoundException)
+                    {
+                        // if there is no SubscriptionSet for this topic
+                        subscriptionSet = new SubscriptionSet(topic);
+                        subscriptionSet.AddSubscriber(origin);
+                        RoutingTable[topic] = subscriptionSet;
+
+                    }
+
+                    if (subscriptionSet.IsSubscribed(origin))
+                    {
+                        Console.Out.WriteLine("This subscription is already present. That shouldn't happen");
+                        return;
+                    }
+                    else
+                    {
+                        subscriptionSet.AddSubscriber(origin);
+                    }
+                }
+
+                foreach (KeyValuePair<string, List<IBroker>> child in Children)
+                {
+                    List<IBroker> childBrokers = child.Value;
+
+                    // picks a random broker for load-balancing purposes
+                    Random rand = new Random();
+                    int brokerIndex = rand.Next(0, childBrokers.Count);
+
+                    // we don't send the SubscriptionSet to where it came from
+                    if (!child.Key.Equals(origin))
+                    {
+                        int seqNum = ++OutSequenceNumbers[child.Key];
+                        Thread thread = new Thread(() => childBrokers[brokerIndex].DeliverSubscription(this.ProcessName, topic, seqNum));
+                        thread.Start();
+                    }
+                }
+            }
+            MessageReceived(origin, sequenceNumber);
+        }
+
+        /// <summary>
+        /// This method should be called after a received message was processes. It increments the sequenceNumber
+        /// and executes the command with the next sequence number 
+        /// </summary>
+        /// <param name="origin"> Process/group name </param>
+        /// <param name="sequenceNumber"> sequence number </param>
+        private void MessageReceived(string origin, int sequenceNumber)
+        {
+            InSequenceNumbers[origin] = sequenceNumber;
+            CommandQueue queue;
+            if (HoldbackQueue.TryGetValue(origin, out queue))
+            {
+                string[] command = queue.GetCommand(sequenceNumber + 1);
+                ProcessInternalCommand(command);
             }
         }
 
-        public void DeliverPublication(string topic, string publication)
+        public void DeliverPublication(string topic, string publication, int sequenceNumber)
         {
             if (Status.Equals(Status.Frozen))
             {
@@ -98,6 +205,7 @@ namespace Broker
                 eventMessage[0] = "DeliverPublication";
                 eventMessage[1] = topic;
                 eventMessage[2] = publication;
+                eventMessage[3] = sequenceNumber.ToString();
             }
             else
             {
@@ -119,11 +227,11 @@ namespace Broker
             switch (command[0])
             {
                 case "DeliverPublication":
-                    DeliverPublication(command[1], command[2]);
+                    DeliverPublication(command[1], command[2], int.Parse(command[3]));
                     break;
 
                 case "DeliverSubscription":
-                    DeliverSubscription(command[1], command[2]);
+                    DeliverSubscription(command[1], command[2], int.Parse(command[3]));
                     break;
 
                 default:

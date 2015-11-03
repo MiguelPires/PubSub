@@ -101,10 +101,9 @@ namespace PuppetMaster
                 string[] processArgs = new string[commandArgs.Length - 1];
                 Array.Copy(commandArgs, 1, processArgs, 0, commandArgs.Length - 1);
                 IProcess process = LocalProcesses[processName];
-                Thread thread = new Thread(() => process.DeliverCommand(processArgs));//process.DeliverCommand(commandArgs));
-                thread.Start(); //thread.Start(commandArgs); *f*
+                Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+                thread.Start();
             }
-
         }
 
         void IPuppetMasterSlave.SendLog(string log)

@@ -26,22 +26,13 @@ namespace Subscriber
             }
 
         }
-        public override void ProcessFrozenListCommands()
+
+        public void ProcessFrozenListCommands()
         {
-            base.ProcessFrozenListCommands();
-            foreach (String[] command in FrozenStateList)
+            string[] command;
+            while (EventBacklog.TryDequeue(out command))
             {
-                switch (command[0])
-                {
-                    case "Subscribe":
-                        //string topic = command[1];
-                        //subscribe to topic
-                        break;
-                    case "Unsubscribe":
-                        //string topic = command[1];
-                        //Unsubscribe from topic
-                        break;
-                }
+                DeliverCommand(command);
             }
         }
 
@@ -58,17 +49,18 @@ namespace Subscriber
             {
                 // generic commands
                 case "Status":
-                    base.DeliverCommand(command);
-                    break;
                 case "Crash":
-                    base.DeliverCommand(command);
-                    break;
                 case "Freeze":
+
                     base.DeliverCommand(command);
                     break;
+
                 case "Unfreeze":
-                    base.DeliverCommand(command);
+                    Console.Out.WriteLine("Unfreezing");
+                    Status = Status.Unfrozen;
+                    ProcessFrozenListCommands();
                     break;
+
                 case "Subscribe":
                     //string topic = command[1];
                     //subscribe to topic
@@ -94,12 +86,5 @@ namespace Subscriber
         {
             return "Subscriber";
         }
-    }
-
-    public enum ProcessType
-    {
-        Broker,
-        Publisher,
-        Subscriber
     }
 }

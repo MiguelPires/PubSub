@@ -92,7 +92,6 @@ namespace CommonTypes
         void DeliverPublication(string publication);
     }
 
-
     /// <summary>
     ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
     /// </summary>

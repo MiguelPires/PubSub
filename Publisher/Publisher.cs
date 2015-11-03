@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using CommonTypes;
 
@@ -24,24 +25,19 @@ namespace Publisher
                 Brokers.Add(parentBroker);
             }
         }
-        public override void ProcessFrozenListCommands()
+
+        public void ProcessFrozenListCommands()
         {
-            base.ProcessFrozenListCommands();
-            foreach (String[] command in FrozenStateList)
+            string[] command;
+            while (EventBacklog.TryDequeue(out command))
             {
-                switch (command[0])
-                {
-                    case "Publish":
-                        //string topic = command[1];
-                        //subscribe to topic
-                        break;
-                }
+               DeliverCommand(command);
             }
         }
 
         public override void DeliverCommand(string[] command)
         {
-            if (Status == Status.Frozen)
+            if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
             {
                 base.DeliverCommand(command);
                 return;
@@ -49,38 +45,40 @@ namespace Publisher
 
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
+
             switch (command[0])
             {
                 // generic commands
                 case "Status":
-                    base.DeliverCommand(command);
-                    break;
                 case "Crash":
-                    base.DeliverCommand(command);
-                    break;
                 case "Freeze":
                     base.DeliverCommand(command);
                     break;
-                case "Unfreeze":
-                    base.DeliverCommand(command);
-                    break;
-                case "Publish":
-                    var numberOfEvents = 0;
 
-                    if ( !(int.TryParse(command[1], out numberOfEvents)))
+                case "Unfreeze":
+                    Console.Out.WriteLine("Unfreezing");
+                    Status = Status.Unfrozen;
+                    ProcessFrozenListCommands();
+                    break;
+
+                case "Publish":
+                    int numberOfEvents = 0;
+
+                    if (!(int.TryParse(command[1], out numberOfEvents)))
                     {
-                        // Parsing was not successful..
-                        Console.Out.WriteLine("int parse failed (numberOfEvents)");
+                        Console.Out.WriteLine("Publisher "+this+": invalid number of events");
                         return;
                     }
-                    var topic = command[3];
-                    var timeInterval = 0;
-                    if (!(int.TryParse(command[5], out timeInterval)))
+
+                    string topic = command[2];
+                    int timeInterval = 0;
+
+                    if (!(int.TryParse(command[3], out timeInterval)))
                     {
-                        // Parsing was not successful..
-                        Console.Out.WriteLine("int parse failed (timeInterval)");
+                        Console.Out.WriteLine("Publisher " + this + ": invalid time interval");
                         return;
                     }
+
                     for (int i = 0; i < numberOfEvents; i++)
                     {
                         string content = ProcessName + i;

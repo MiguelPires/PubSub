@@ -76,12 +76,18 @@ namespace PuppetMaster
             else
             {
                 // find the process's site
-                string site = SiteProcesses[processName];
-                if (site == null)
+
+                string site = null;
+                try
                 {
-                    Console.Out.WriteLine("Process name "+processName + " is not registered in the SiteProcesses hashtable.");
+                    site = SiteProcesses[processName];
+                }
+                catch (KeyNotFoundException)
+                {
+                    Console.Out.WriteLine("The process " + processName + " couldn't be found.");
                     return;
                 }
+
                 if (site.Equals(SiteName))
                 {
                     // the process doesn't need to receive it's own name (first index in puppetArgs)
@@ -131,7 +137,7 @@ namespace PuppetMaster
 
                 case "Publisher":
                     args[0] = tokens[1]; // process name
-                    args[0] = "Publish";
+                    args[1] = "Publish";
                     args[2] = tokens[3]; // number of events
                     args[3] = tokens[5]; // topic name
                     args[4] = tokens[7]; // time interval (ms)

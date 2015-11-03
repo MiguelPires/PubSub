@@ -16,7 +16,7 @@ namespace PuppetMaster
         
         public void DeliverMessage(string message)
         {
-            this.logBox.Text += message + "\r\n";
+            this.logBox.Text += message.Trim() + "\r\n";
         }
 
 
@@ -33,7 +33,7 @@ namespace PuppetMaster
         {
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
-            this.master.SendCommand(this.IndividualBox.Text);
+            this.master.SendCommand(this.IndividualBox.Text.Trim());
             this.IndividualBox.Clear();
         }
 

@@ -99,6 +99,14 @@ namespace Broker
             }
         }
 
+        public void ProcessFrozenListCommands()
+        {
+            string[] command;
+            while (EventBacklog.TryDequeue(out command))
+            {
+                DeliverCommand(command);
+            }
+        }
 
         public override void DeliverCommand(string[] command)
         {
@@ -113,16 +121,16 @@ namespace Broker
             {
                 // generic commands
                 case "Status":
-                    base.DeliverCommand(command);
-                    break;
                 case "Crash":
-                    base.DeliverCommand(command);
-                    break;
                 case "Freeze":
                     base.DeliverCommand(command);
                     break;
+
                 case "Unfreeze":
-                    base.DeliverCommand(command);
+                    Console.Out.WriteLine("Unfreezing");
+                    Status = Status.Unfrozen;
+                    ProcessFrozenListCommands();
+                    //EventBacklog();
                     break;
 
                 default:

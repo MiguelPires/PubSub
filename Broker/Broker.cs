@@ -40,6 +40,8 @@ namespace Broker
             LocalSubscriptions = new Dictionary<string, List<string>>();
             RoutingTable = new Dictionary<string, SubscriptionSet>();
             HoldbackQueue = new Dictionary<string, CommandQueue>();
+            InSequenceNumbers = new Dictionary<string, int>();
+            OutSequenceNumbers = new Dictionary<string, int>();
 
             if (parentSite.Equals("none"))
                 return;
@@ -92,7 +94,16 @@ namespace Broker
                 eventMessage[1] = origin;
                 eventMessage[2] = topic;
                 eventMessage[3] = sequenceNumber.ToString();
-            } else if (sequenceNumber > InSequenceNumbers[origin] + 1)
+                return;
+            }
+
+            int lastNumber;
+            if (InSequenceNumbers.TryGetValue(origin, out lastNumber))
+                InSequenceNumbers[origin] = 0;
+            else
+                lastNumber = 0;
+
+            if (sequenceNumber > lastNumber + 1)
             {
                 string[] eventMessage = new string[4];
                 eventMessage[0] = "DeliverSubscription";

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Net.Sockets;
 using System.Threading;
 using CommonTypes;
 
@@ -25,20 +25,16 @@ namespace Subscriber
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
-                IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), brokerUrl);
-                parentBroker.RegisterPubSub(ProcessName, Url);
-                Brokers.Add(parentBroker);
-            }
-
-
-        }
-
-        public void ProcessFrozenListCommands()
-        {
-            string[] command;
-            while (EventBacklog.TryDequeue(out command))
-            {
-                DeliverCommand(command);
+                try
+                {
+                    IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
+                    parentBroker.RegisterPubSub(ProcessName, Url);
+                    Brokers.Add(parentBroker);
+                }
+                catch (SocketException)
+                {
+                    Console.Out.WriteLine(processName + " couldn't connect to " + brokerUrl);
+                }
             }
         }
 
@@ -57,7 +53,6 @@ namespace Subscriber
                 case "Status":
                 case "Crash":
                 case "Freeze":
-
                     base.DeliverCommand(command);
                     break;
 
@@ -68,19 +63,16 @@ namespace Subscriber
                     break;
 
                 case "Subscribe":
-                    string topic = command[1];
-                    SendSubscription(topic);
+                    SendSubscription(command[1]);
                     break;
 
                 case "Unsubscribe":
-                    //string topic = command[1];
-                    //Unsubscribe from topic
+                    SendUnsubscription(command[1]);
                     break;
 
                 default:
                     Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
-                    // subscriber specific commands
             }
         }
 
@@ -89,20 +81,46 @@ namespace Subscriber
             throw new NotImplementedException();
         }
 
+        public void ProcessFrozenListCommands()
+        {
+            string[] command;
+            while (EventBacklog.TryDequeue(out command))
+            {
+                DeliverCommand(command);
+            }
+        }
+
         /// <summary>
-        /// This method sends a subscription to a random broker at this site
+        ///     This method sends a subscription to a random broker at this site
         /// </summary>
         /// <param name="topic"> The topic of the subscription </param>
         private void SendSubscription(string topic)
         {
-            ++OutSequenceNumber;
-           // picks a random broker for load-balancing purposes
+            // picks a random broker for load-balancing purposes
             Random rand = new Random();
             int brokerIndex = rand.Next(0, Brokers.Count);
-            Thread thread = new Thread(() => Brokers[brokerIndex].DeliverSubscription(this.ProcessName, topic, OutSequenceNumber));
+
+            if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
+                ++OutSequenceNumber;
+
+            Thread thread =
+                new Thread(() => Brokers[brokerIndex].DeliverSubscription(ProcessName, topic, OutSequenceNumber));
             thread.Start();
         }
 
+        private void SendUnsubscription(string topic)
+        {
+            // picks a random broker for load-balancing purposes
+            Random rand = new Random();
+            int brokerIndex = rand.Next(0, Brokers.Count);
+
+            if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
+                ++OutSequenceNumber;
+
+            Thread thread =
+                new Thread(() => Brokers[brokerIndex].DeliverUnsubscription(ProcessName, topic, OutSequenceNumber));
+            thread.Start();
+        }
         public override string ToString()
         {
             return "Subscriber";

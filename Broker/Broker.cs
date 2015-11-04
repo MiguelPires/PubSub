@@ -7,12 +7,14 @@ using CommonTypes;
 
 namespace Broker
 {
-    public class Broker : BaseProcess, IBroker
+    public class Broker : BaseProcess, IBroker, IReplica
     {
         // maps a site's name to a list of the site's brokers
         public IDictionary<string, List<IBroker>> Children { get; }
         // this broker's parent brokers
         public List<IBroker> ParentBrokers { get; }
+        //the list of other brokers at this site
+        public List<IBroker> SiblingBrokers { get; private set; }
         // maps a process name to a process instance
         public IDictionary<string, IProcess> LocalProcesses { get; }
         // this site's name
@@ -37,12 +39,13 @@ namespace Broker
             Children = new Dictionary<string, List<IBroker>>();
             LocalProcesses = new Dictionary<string, IProcess>();
             ParentBrokers = new List<IBroker>();
+            SiblingBrokers = new List<IBroker>();
             LocalSubscriptions = new Dictionary<string, List<string>>();
             RoutingTable = new Dictionary<string, SubscriptionSet>();
             HoldbackQueue = new Dictionary<string, CommandQueue>();
             InSequenceNumbers = new Dictionary<string, int>();
-            OutSequenceNumbers = new Dictionary<string, int>();
-
+            OutSequenceNumbers = new Dictionary<string, int>();     
+        
             if (parentSite.Equals("none"))
                 return;
 
@@ -85,6 +88,11 @@ namespace Broker
             OutSequenceNumbers[procName] = 0;
         }
 
+        public void RegisterSiblingBroker(string siblingUrl)
+        {
+            // connect to the sibling and add it to the list
+        }
+
         public void DeliverSubscription(string origin, string topic, int sequenceNumber)
         {
             if (Status.Equals(Status.Frozen))
@@ -103,7 +111,7 @@ namespace Broker
             else
                 lastNumber = 0;
 
-            if (sequenceNumber > lastNumber + 1)
+            if (OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
             {
                 string[] eventMessage = new string[4];
                 eventMessage[0] = "DeliverSubscription";
@@ -131,16 +139,16 @@ namespace Broker
                 // if the process is local
                 if (LocalProcesses.Keys.Contains(origin))
                 {
-
                     // add process to the local subscriptions
                     List<string> processes;
                     if (LocalSubscriptions.TryGetValue(topic, out processes))
                         LocalSubscriptions[topic].Add(origin);
                     else
-                        LocalSubscriptions[topic] = new List<string>() {origin};
+                        LocalSubscriptions[topic] = new List<string> {origin};
 
+                    // send the new state to the other brokers
+                    PropagateLocalSubscription(topic, origin);
                     Console.Out.WriteLine("Local subscription");
-
                 }
                 else
                 {
@@ -157,7 +165,6 @@ namespace Broker
                         subscriptionSet = new SubscriptionSet(topic);
                         subscriptionSet.AddSubscriber(origin);
                         RoutingTable[topic] = subscriptionSet;
-
                     }
 
                     if (subscriptionSet.IsSubscribed(origin))
@@ -182,13 +189,35 @@ namespace Broker
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(origin))
                     {
-                        int seqNum = ++OutSequenceNumbers[child.Key];
+                        int seqNum;
+                        if (OrderingGuarantee == OrderingGuarantee.Fifo)
+                            seqNum = ++OutSequenceNumbers[child.Key];
+                        else
+                            seqNum = 0;
+
                         Thread thread = new Thread(() => childBrokers[brokerIndex].DeliverSubscription(this.ProcessName, topic, seqNum));
                         thread.Start();
                     }
                 }
             }
             MessageReceived(origin, sequenceNumber);
+        }
+
+        public void DeliverUnsubscription(string origin, string topic, int sequenceNumber)
+        {
+            
+        }
+
+        /// <summary>
+        /// This method sends the local subscription to the other brokers
+        /// </summary>
+        private void PropagateLocalSubscription(string topic, string processName)
+        {
+            foreach (var replica in SiblingBrokers)
+            {
+                Thread thread = new Thread(() => replica.AddLocalSubscription(topic, processName));
+                thread.Start();
+            }
         }
 
         /// <summary>
@@ -199,6 +228,9 @@ namespace Broker
         /// <param name="sequenceNumber"> sequence number </param>
         private void MessageReceived(string origin, int sequenceNumber)
         {
+            if (OrderingGuarantee != OrderingGuarantee.Fifo)
+                return;
+
             InSequenceNumbers[origin] = sequenceNumber;
             CommandQueue queue;
             if (HoldbackQueue.TryGetValue(origin, out queue))
@@ -222,6 +254,13 @@ namespace Broker
             {
                 Console.Out.WriteLine("Deliver publication");
             }
+        }
+
+        public void AddSiblingBroker(string siblingUrl)
+        {
+            Console.Out.WriteLine("Received sibling "+siblingUrl);
+            IBroker sibling = (IBroker)Activator.GetObject(typeof(IBroker), siblingUrl);
+            SiblingBrokers.Add(sibling);
         }
 
         public void ProcessFrozenListCommands()
@@ -292,6 +331,31 @@ namespace Broker
         public override string ToString()
         {
             return "Broker";
+        }
+
+        public void AddLocalSubscription(string topic, string process)
+        {
+            Console.Out.WriteLine("Received propagated local subscription");
+            List<string> processes;
+            if (LocalSubscriptions.TryGetValue(topic, out processes))
+                LocalSubscriptions[topic].Add(process);
+            else
+                LocalSubscriptions[topic] = new List<string> { process };
+        }
+
+        public void RemoveLocalSubscription(string topic, string process)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void AddRemoteSubscription(string topic, string process)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void RemoveRemoteSubscription(string topic, string process)
+        {
+            throw new NotImplementedException();
         }
     }
 }

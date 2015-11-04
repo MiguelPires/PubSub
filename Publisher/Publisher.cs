@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Net;
+using System.Net.Sockets;
+using System.Threading;
 using CommonTypes;
 
 namespace Publisher
@@ -20,18 +20,16 @@ namespace Publisher
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
-                IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
-                parentBroker.RegisterPubSub(ProcessName, Url);
-                Brokers.Add(parentBroker);
-            }
-        }
-
-        public void ProcessFrozenListCommands()
-        {
-            string[] command;
-            while (EventBacklog.TryDequeue(out command))
-            {
-               DeliverCommand(command);
+                try
+                {
+                    IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
+                    parentBroker.RegisterPubSub(ProcessName, Url);
+                    Brokers.Add(parentBroker);
+                }
+                catch (SocketException)
+                {
+                    Console.Out.WriteLine(processName+" couldn't connect to "+brokerUrl);
+                }
             }
         }
 
@@ -66,7 +64,7 @@ namespace Publisher
 
                     if (!(int.TryParse(command[1], out numberOfEvents)))
                     {
-                        Console.Out.WriteLine("Publisher "+this+": invalid number of events");
+                        Console.Out.WriteLine("Publisher " + this + ": invalid number of events");
                         return;
                     }
 
@@ -82,21 +80,30 @@ namespace Publisher
                     for (int i = 0; i < numberOfEvents; i++)
                     {
                         string content = ProcessName + i;
-                       // sendPublication(topic,content);
-                        System.Threading.Thread.Sleep(timeInterval);
+                        // sendPublication(topic,content);
+                        Thread.Sleep(timeInterval);
                     }
                     break;
 
                 default:
                     Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
-                    // subscriber specific commands
+                // subscriber specific commands
             }
         }
 
         void IPublisher.SendPublication(string publication)
         {
             throw new NotImplementedException();
+        }
+
+        public void ProcessFrozenListCommands()
+        {
+            string[] command;
+            while (EventBacklog.TryDequeue(out command))
+            {
+                DeliverCommand(command);
+            }
         }
 
         public override string ToString()

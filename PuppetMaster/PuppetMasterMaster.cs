@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 using CommonTypes;
-
 
 namespace PuppetMaster
 {
@@ -13,15 +14,18 @@ namespace PuppetMaster
         public InteractionForm Form { get; set; }
         // maps a site to it's puppetMaster
         public IDictionary<string, IPuppetMasterSlave> Slaves { get; set; }
+        // every broker in the system - only used at startup
+        public List<string[]> BrokersStartup { get; }
         // maps a process to it's site name
         public IDictionary<string, string> SiteProcesses;
 
         private delegate void DelegateDeliverMessage(string message);
 
-        public PuppetMasterMaster(string siteName) : base (siteName)
+        public PuppetMasterMaster(string siteName) : base(siteName)
         {
             Slaves = new Dictionary<string, IPuppetMasterSlave>();
             this.SiteProcesses = new Dictionary<string, string>();
+            BrokersStartup = new List<string[]>();
 
             StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
 
@@ -32,7 +36,24 @@ namespace PuppetMaster
             }
 
             reader.Close();
+
+            // inform every broker of it's siblings
+            foreach (string[] brokerArgs in BrokersStartup)
+            {
+                Console.Out.WriteLine("Broker "+brokerArgs[1]);
+                IBroker broker = (IBroker) Activator.GetObject(typeof (IBroker), brokerArgs[1]);
+                foreach (string[] siblingArgs in BrokersStartup)
+                {
+                    if (brokerArgs[0] == siblingArgs[0] && brokerArgs[1] != siblingArgs[1])
+                    {
+                        Console.Out.WriteLine("Sibling " + siblingArgs[1]);
+                        Thread thread = new Thread(() => broker.AddSiblingBroker(siblingArgs[1]));
+                        thread.Start();
+                    }
+                }
+            }
         }
+
 
         void IProcessMaster.DeliverLogToPuppetMaster(string log)
         {
@@ -66,21 +87,20 @@ namespace PuppetMaster
                 {
                     slave.DeliverCommand(puppetArgs);
                 }
-                
+
                 // deliver command to every local process
-                foreach (var proc in LocalProcesses.Values)
+                foreach (IProcess proc in LocalProcesses.Values)
                 {
-                    proc.DeliverCommand(new string[] {puppetArgs[1]});
+                    proc.DeliverCommand(new[] {puppetArgs[1]});
                 }
             }
             else
             {
                 // find the process's site
-
                 string site = null;
                 try
                 {
-                    site = SiteProcesses[processName];
+                    site = this.SiteProcesses[processName];
                 }
                 catch (KeyNotFoundException)
                 {
@@ -91,7 +111,7 @@ namespace PuppetMaster
                 if (site.Equals(SiteName))
                 {
                     // the process doesn't need to receive it's own name (first index in puppetArgs)
-                    string[] processArgs = new string[puppetArgs.Length-1];
+                    string[] processArgs = new string[puppetArgs.Length - 1];
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
                     IProcess process = LocalProcesses[processName];
                     process.DeliverCommand(processArgs);
@@ -115,6 +135,21 @@ namespace PuppetMaster
 
         public void Ping()
         {
+        }
+
+        public RoutingPolicy GetRoutingPolicy()
+        {
+            return this.RoutingPolicy;
+        }
+
+        public LoggingLevel GetLoggingLevel()
+        {
+            return this.LoggingLevel;
+        }
+
+        public OrderingGuarantee GetOrderingGuarantee()
+        {
+            return this.OrderingGuarantee;
         }
 
         public override string ToString()
@@ -215,6 +250,13 @@ namespace PuppetMaster
             string siteName = tokens[5];
 
             this.SiteProcesses[processName] = siteName;
+
+            // we need to keep track of all broker to inform them of the other brokers at their site
+            // this can only be done in the end of the parsing 
+            if (processType == "broker")
+            {
+                BrokersStartup.Add(new[] {siteName, processUrl});
+            }
 
             // if the site is this site
             if (siteName.Equals(SiteName))
@@ -340,21 +382,6 @@ namespace PuppetMaster
                 Console.WriteLine(@"The slave at " + name + @" already exists");
                 return null;
             }
-        }
-
-        public RoutingPolicy GetRoutingPolicy()
-        {
-            return RoutingPolicy;
-        }
-
-        public LoggingLevel GetLoggingLevel()
-        {
-            return LoggingLevel;
-        }
-
-        public OrderingGuarantee GetOrderingGuarantee()
-        {
-            return OrderingGuarantee;
         }
     }
 }

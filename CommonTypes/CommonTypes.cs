@@ -86,12 +86,25 @@ namespace CommonTypes
     /// <summary>
     ///     The interface for the Brokers
     /// </summary>
-    public interface IBroker : IProcess
+    public interface IBroker : IProcess, IReplica
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
         void DeliverSubscription(string origin, string topic, int sequenceNumber);
+        void DeliverUnsubscription(string origin, string topic, int sequenceNumber);
         void DeliverPublication(string topic, string publication, int sequenceNumber);
+        void AddSiblingBroker(string siblingUrl);
+    }
+
+    /// <summary>
+    ///     The interface used by the Brokers to replicate their collective state
+    /// </summary>
+    public interface IReplica
+    {
+        void AddLocalSubscription(string topic, string process);
+        void RemoveLocalSubscription(string topic, string process);
+        void AddRemoteSubscription(string topic, string process);
+        void RemoveRemoteSubscription(string topic, string process);
     }
 
     public interface IPublisher : IProcess

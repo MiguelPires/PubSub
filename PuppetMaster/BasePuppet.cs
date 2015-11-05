@@ -67,13 +67,13 @@ namespace PuppetMaster
             {
                 UseShellExecute = true,
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
-                Arguments = processName + " " + processUrl + " " + Url
+                Arguments = processName + " " + processUrl + " " + Url+" " + SiteName
             };
 
             switch (processType)
             {
                 case "broker":
-                    startInfo.Arguments += " " + SiteName + " " + ParentSite;
+                    startInfo.Arguments += " " + ParentSite;
                     startInfo.FileName = "Broker";
                     Process.Start(startInfo);
                     LocalProcesses[processName] = (IBroker) Activator.GetObject(typeof (IBroker), processUrl);

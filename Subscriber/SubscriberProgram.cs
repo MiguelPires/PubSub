@@ -16,7 +16,7 @@ namespace Subscriber
     {
         static void Main(string[] args)
         {
-            if (args.Length != 3)
+            if (args.Length != 4)
             {
                 Console.Out.WriteLine("Subscriber - Incorrect number of arguments");
                 Console.ReadLine();
@@ -26,8 +26,9 @@ namespace Subscriber
             string processName = args[0];
             string processUrl = args[1];
             string puppetMasterUrl = args[2];
+            string siteName = args[3];
 
-            Subscriber subscriber = new Subscriber(processName, processUrl, puppetMasterUrl);
+            Subscriber subscriber = new Subscriber(processName, processUrl, puppetMasterUrl, siteName);
 
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;

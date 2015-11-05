@@ -15,8 +15,8 @@ namespace Subscriber
         // the sequence number used by messages received by the broker group
         public int InSequenceNumber { get; private set; }
 
-        public Subscriber(string processName, string processUrl, string puppetMasterUrl)
-            : base(processName, processUrl, puppetMasterUrl)
+        public Subscriber(string processName, string processUrl, string puppetMasterUrl, string siteName)
+            : base(processName, processUrl, puppetMasterUrl, siteName)
         {
             Brokers = new List<IBroker>();
 
@@ -104,7 +104,7 @@ namespace Subscriber
                 ++OutSequenceNumber;
 
             Thread thread =
-                new Thread(() => Brokers[brokerIndex].DeliverSubscription(ProcessName, topic, OutSequenceNumber));
+                new Thread(() => Brokers[brokerIndex].DeliverSubscription(ProcessName, topic, SiteName, OutSequenceNumber));
             thread.Start();
         }
 

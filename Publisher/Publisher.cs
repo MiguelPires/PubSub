@@ -11,8 +11,8 @@ namespace Publisher
         // this site's brokers
         public List<IBroker> Brokers { get; set; }
 
-        public Publisher(string processName, string processUrl, string puppetMasterUrl)
-            : base(processName, processUrl, puppetMasterUrl)
+        public Publisher(string processName, string processUrl, string puppetMasterUrl, string siteName)
+            : base(processName, processUrl, puppetMasterUrl, siteName)
         {
             Brokers = new List<IBroker>();
             List<string> brokerUrls = GetBrokers(puppetMasterUrl);

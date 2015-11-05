@@ -16,7 +16,7 @@ namespace Publisher
     {
         static void Main(string[] args)
         {
-            if (args.Length != 3)
+            if (args.Length != 4)
             {
                 Console.Out.WriteLine("Publisher - Incorrect number of arguments");
                 Console.ReadLine();
@@ -26,8 +26,9 @@ namespace Publisher
             string processName = args[0];
             string processUrl = args[1];
             string puppetMasterUrl = args[2];
+            string site = args[3];
 
-            Publisher publisher = new Publisher(processName, processUrl, puppetMasterUrl);
+            Publisher publisher = new Publisher(processName, processUrl, puppetMasterUrl, site);
 
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;

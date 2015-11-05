@@ -13,7 +13,9 @@ namespace CommonTypes
         public string ProcessName { get; private set; }
         // this broker's url
         public string Url { get; }
-        // public string PuppetMasterUrl { get; }
+        // this site's name
+        public string SiteName { get; private set; }
+        // 
         public IPuppetMaster PuppetMaster { get; private set; }
         // system status (frozen, unfrozen)
         public Status Status { get; protected set; }
@@ -26,11 +28,12 @@ namespace CommonTypes
         // the routing setting
         public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
 
-        protected BaseProcess(string processName, string processUrl, string puppetMasterUrl)
+        protected BaseProcess(string processName, string processUrl, string puppetMasterUrl, string siteName)
         {
             ProcessName = processName;
             Url = processUrl;
             EventBacklog = new ConcurrentQueue<string[]>();
+            SiteName = siteName;
 
             // connects to this site's puppetMaster
             ConnectToPuppetMaster(puppetMasterUrl);

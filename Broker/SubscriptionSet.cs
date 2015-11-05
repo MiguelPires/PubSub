@@ -35,9 +35,9 @@ namespace Broker
             return Processes.TryGetValue(processName, out site);
         }
 
-        public ICollection<string> GetMatchList()
+        public IDictionary<string, string> GetMatchList()
         {
-            return Processes.Keys;
+            return Processes;
         }
     }
 }

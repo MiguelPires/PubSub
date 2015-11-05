@@ -49,7 +49,7 @@ namespace Subscriber
 
             TcpChannel channel = new TcpChannel(prop, null, serverProv);
             ChannelServices.RegisterChannel(channel, false);
-            RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(IProcess));
+            RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(ISubscriber));
 
             Console.WriteLine(@"Running a " + subscriber + " at " + processUrl);
             Console.ReadLine();

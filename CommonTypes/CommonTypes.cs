@@ -92,7 +92,7 @@ namespace CommonTypes
         void RegisterPubSub(string procName, string procUrl);
         void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber);
         void DeliverUnsubscription(string origin, string topic, int sequenceNumber);
-        void DeliverPublication(string topic, string publication, int sequenceNumber);
+        void DeliverPublication(string origin, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
 
@@ -109,7 +109,7 @@ namespace CommonTypes
 
     public interface IPublisher : IProcess
     {
-        void SendPublication(string publication);
+        void SendPublication(string topic, string publication);
     }
 
     public interface ISubscriber : IProcess

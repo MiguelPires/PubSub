@@ -12,8 +12,6 @@ namespace Subscriber
         public List<IBroker> Brokers { get; set; }
         // the sequence number used by messages sent to the broker group
         public int OutSequenceNumber { get; private set; }
-        // the sequence number used by messages received by the broker group
-        public int InSequenceNumber { get; private set; }
 
         public Subscriber(string processName, string processUrl, string puppetMasterUrl, string siteName)
             : base(processName, processUrl, puppetMasterUrl, siteName)
@@ -45,6 +43,7 @@ namespace Subscriber
                 base.DeliverCommand(command);
                 return;
             }
+
             string complete = string.Join(" ", command);
             Console.Out.WriteLine("Received command: " + complete);
             switch (command[0])
@@ -78,13 +77,14 @@ namespace Subscriber
 
         void ISubscriber.DeliverPublication(string publication, int sequenceNumber)
         {
-            throw new NotImplementedException();
+            // TODO: add sequence number checking
+            Console.Out.WriteLine("Received publication '" + publication+"'");
         }
 
         public void ProcessFrozenListCommands()
         {
             string[] command;
-            while (EventBacklog.TryDequeue(out command))
+            while (CommandBacklog.TryDequeue(out command))
             {
                 DeliverCommand(command);
             }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.Mime;
 using System.Net.Sockets;
 using System.Threading;
 using CommonTypes;
@@ -10,6 +11,8 @@ namespace Publisher
     {
         // this site's brokers
         public List<IBroker> Brokers { get; set; }
+        // the sequence number used by messages sent to the broker group
+        public int OutSequenceNumber { get; private set; }
 
         public Publisher(string processName, string processUrl, string puppetMasterUrl, string siteName)
             : base(processName, processUrl, puppetMasterUrl, siteName)
@@ -64,7 +67,7 @@ namespace Publisher
 
                     if (!(int.TryParse(command[1], out numberOfEvents)))
                     {
-                        Console.Out.WriteLine("Publisher " + this + ": invalid number of events");
+                        Console.Out.WriteLine("Publisher " + ProcessName + ": invalid number of events");
                         return;
                     }
 
@@ -73,14 +76,15 @@ namespace Publisher
 
                     if (!(int.TryParse(command[3], out timeInterval)))
                     {
-                        Console.Out.WriteLine("Publisher " + this + ": invalid time interval");
+                        Console.Out.WriteLine("Publisher " + ProcessName + ": invalid time interval");
                         return;
                     }
 
                     for (int i = 0; i < numberOfEvents; i++)
                     {
                         string content = ProcessName + i;
-                        // sendPublication(topic,content);
+                        Console.Out.WriteLine("Publishing '"+content+"' on topic "+topic);
+                        SendPublication(topic, content);
                         Thread.Sleep(timeInterval);
                     }
                     break;
@@ -92,15 +96,24 @@ namespace Publisher
             }
         }
 
-        void IPublisher.SendPublication(string publication)
+        public void SendPublication(string topic, string publication)
         {
-            throw new NotImplementedException();
+            Random rand = new Random();
+            int brokersIndex = rand.Next(0, Brokers.Count);
+            IBroker broker = Brokers[brokersIndex];
+
+            if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
+                ++OutSequenceNumber;
+
+            Thread thread =
+                          new Thread(() => broker.DeliverPublication(ProcessName, topic, publication, SiteName, OutSequenceNumber));
+            thread.Start();
         }
 
         public void ProcessFrozenListCommands()
         {
             string[] command;
-            while (EventBacklog.TryDequeue(out command))
+            while (CommandBacklog.TryDequeue(out command))
             {
                 DeliverCommand(command);
             }

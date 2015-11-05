@@ -20,7 +20,9 @@ namespace CommonTypes
         // system status (frozen, unfrozen)
         public Status Status { get; protected set; }
         // a queue of actions saved when process state is frozen (events that are yet to be processed)
-        public ConcurrentQueue<string[]> EventBacklog { get; set; }
+        public ConcurrentQueue<string[]> CommandBacklog { get; set; }
+        // a list with messages received in the frozen state
+        public List<string[]> FrozenMessages { get; set; }
         // the logging setting
         public LoggingLevel LoggingLevel = LoggingLevel.Light;
         // the ordering setting
@@ -32,7 +34,8 @@ namespace CommonTypes
         {
             ProcessName = processName;
             Url = processUrl;
-            EventBacklog = new ConcurrentQueue<string[]>();
+            CommandBacklog = new ConcurrentQueue<string[]>();
+            FrozenMessages = new List<string[]>();
             SiteName = siteName;
 
             // connects to this site's puppetMaster
@@ -58,7 +61,7 @@ namespace CommonTypes
                         break;
 
                     default:
-                        EventBacklog.Enqueue(command);
+                        CommandBacklog.Enqueue(command);
                         break;
                 }
             }

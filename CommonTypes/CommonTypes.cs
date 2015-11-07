@@ -91,7 +91,7 @@ namespace CommonTypes
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
         void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber);
-        void DeliverUnsubscription(string origin, string topic, int sequenceNumber);
+        void DeliverUnsubscription(string origin, string topic,string siteName, int sequenceNumber);
         void DeliverPublication(string origin, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
@@ -101,9 +101,9 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void AddLocalSubscription(string process, string topic, string siteName, int sequenceNumber);/*
-        void RemoveLocalSubscription(string topic, string process);
-        void AddRemoteSubscription(string topic, string process);
+        void AddLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
+        void RemoveLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
+       /* void AddRemoteSubscription(string topic, string process);
         void RemoveRemoteSubscription(string topic, string process);*/
     }
 

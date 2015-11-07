@@ -140,8 +140,55 @@ namespace Broker
         }
 
 
-        public void DeliverUnsubscription(string origin, string topic, int sequenceNumber)
+        public void DeliverUnsubscription(string origin, string topic, string siteName, int sequenceNumber)
         {
+            if (!UnsubscriptionReceived(topic, origin, siteName, sequenceNumber))
+                return;
+
+            Console.Out.WriteLine("Receiving unsubscription on topic " + topic + " from  " + origin);
+
+            // get or create the subscription for this topic
+            SubscriptionSet subscriptionSet;
+            if (!RoutingTable.TryGetValue(topic, out subscriptionSet))
+            {
+                subscriptionSet = new SubscriptionSet(topic);
+            }
+
+            subscriptionSet.RemoveSubscriber(origin);
+            RoutingTable[topic] = subscriptionSet;
+
+            ForwardLocalUnsubscription(origin, topic, siteName, sequenceNumber);
+
+            Random rand = new Random();
+            foreach (KeyValuePair<string, List<IBroker>> child in Children)
+            {
+                // picks a random broker for load-balancing purposes
+                List<IBroker> childBrokers = child.Value;
+                int childIndex = rand.Next(0, childBrokers.Count);
+
+                // we don't send the SubscriptionSet to where it came from
+                if (!child.Key.Equals(siteName))
+                {
+                    IBroker childBroker = childBrokers[childIndex];
+                    Thread thread =
+                        new Thread(() => childBroker.DeliverUnsubscription(ProcessName, topic, SiteName, sequenceNumber));
+                    thread.Start();
+                }
+            }
+
+            // we don't send the subscription to where it came from
+            if (!ParentSite.Equals(siteName) && !ParentSite.Equals("none"))
+            {
+                // picks a random broker for load-balancing purposes
+                int parentIndex = rand.Next(0, ParentBrokers.Count);
+                IBroker parent = ParentBrokers[parentIndex];
+
+                Thread thread =
+                    new Thread(() => parent.DeliverUnsubscription(origin, topic, siteName, sequenceNumber));
+                thread.Start();
+            }
+
+            MessageProcessed(origin, sequenceNumber);
         }
 
         public void DeliverPublication(string origin, string topic, string publication, string fromSite, int sequenceNumber)
@@ -216,7 +263,7 @@ namespace Broker
 
         public override void DeliverCommand(string[] command)
         {
-            if (Status == Status.Frozen)
+            if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
             {
                 base.DeliverCommand(command);
                 return;
@@ -285,7 +332,30 @@ namespace Broker
 
             subscriptionSet.AddSubscriber(process, siteName);
         }
+        /// <summary>
+        ///     Replicates the unsubscription to this replica
+        /// </summary>
+        /// <param name="process"></param>
+        /// <param name="topic"></param>
+        /// <param name="siteName"></param>
+        /// <param name="sequenceNumber"></param>
+        public void RemoveLocalSubscription(string process, string topic, string siteName, int sequenceNumber)
+        {
+            Console.Out.WriteLine("Receiving replicated unsubscription on topic " + topic + " from " + process);
 
+            if (!UnsubscriptionReceived(topic, process, siteName, sequenceNumber))
+                return;
+
+            // get or create the SubscriptionSet for this topic
+            SubscriptionSet subscriptionSet;
+            if (!RoutingTable.TryGetValue(topic, out subscriptionSet))
+            {
+                subscriptionSet = new SubscriptionSet(topic);
+                RoutingTable[topic] = subscriptionSet;
+            }
+
+            subscriptionSet.RemoveSubscriber(process);
+        }
         /// <summary>
         ///     This method sends the local subscription to the other brokers
         /// </summary>
@@ -298,7 +368,18 @@ namespace Broker
                 thread.Start();
             }
         }
-
+        /// <summary>
+        ///     This method sends the local unsubscription to the other brokers
+        /// </summary>
+        private void ForwardLocalUnsubscription(string processName, string topic, string siteName, int sequenceNumber)
+        {
+            foreach (IBroker replica in SiblingBrokers)
+            {
+                Thread thread =
+                    new Thread(() => replica.RemoveLocalSubscription(processName, topic, siteName, sequenceNumber));
+                thread.Start();
+            }
+        }
         /// <summary>
         ///     This method should be called after a received message was processed. It increments the sequenceNumber
         ///     and executes the command with the next sequence number
@@ -342,7 +423,9 @@ namespace Broker
                 case "DeliverSubscription":
                     DeliverSubscription(command[1], command[2], command[3], int.Parse(command[4]));
                     break;
-
+                case "DeliverUnsubscription":
+                    DeliverUnsubscription(command[1], command[2], command[3], int.Parse(command[4]));
+                    break;
                 default:
                     Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
@@ -399,7 +482,46 @@ namespace Broker
             return true;
         }
 
+        private bool UnsubscriptionReceived(string topic, string origin, string siteName, int sequenceNumber)
+        {
+            string[] eventMessage = new string[5];
+            eventMessage[0] = "DeliverUnsubscription";
+            eventMessage[1] = origin;
+            eventMessage[2] = topic;
+            eventMessage[3] = siteName;
+            eventMessage[4] = sequenceNumber.ToString();
 
+            if (Status.Equals(Status.Frozen))
+            {
+                FrozenMessages.Add(eventMessage);
+                return false;
+            }
+
+            int lastNumber;
+            if (InSequenceNumbers.TryGetValue(origin, out lastNumber))
+                InSequenceNumbers[origin] = 0;
+            else
+                lastNumber = 0;
+
+            if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
+            {
+                Console.Out.WriteLine("Delayed message detected. Queueing");
+                CommandQueue queue;
+
+                if (HoldbackQueue.TryGetValue(origin, out queue))
+                {
+                    queue.AddCommand(eventMessage, sequenceNumber);
+                }
+                else
+                {
+                    queue = new CommandQueue();
+                    queue.AddCommand(eventMessage, sequenceNumber);
+                    HoldbackQueue[origin] = queue;
+                }
+                return false;
+            }
+            return true;
+        }
         /// <summary>
         ///     Decides what to do with the publication. Returns true if it should be further processed
         ///     or false if it shouldn't

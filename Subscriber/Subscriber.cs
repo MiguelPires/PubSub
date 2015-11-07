@@ -25,7 +25,7 @@ namespace Subscriber
             {
                 try
                 {
-                    IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
+                    IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), brokerUrl);
                     parentBroker.RegisterPubSub(ProcessName, Url);
                     Brokers.Add(parentBroker);
                 }
@@ -38,7 +38,7 @@ namespace Subscriber
 
         public override void DeliverCommand(string[] command)
         {
-            if (Status == Status.Frozen)
+            if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
             {
                 base.DeliverCommand(command);
                 return;
@@ -78,7 +78,7 @@ namespace Subscriber
         void ISubscriber.DeliverPublication(string publication, int sequenceNumber)
         {
             // TODO: add sequence number checking
-            Console.Out.WriteLine("Received publication '" + publication+"'");
+            Console.Out.WriteLine("Received publication '" + publication + "'");
         }
 
         public void ProcessFrozenListCommands()
@@ -118,7 +118,7 @@ namespace Subscriber
                 ++OutSequenceNumber;
 
             Thread thread =
-                new Thread(() => Brokers[brokerIndex].DeliverUnsubscription(ProcessName, topic, OutSequenceNumber));
+                new Thread(() => Brokers[brokerIndex].DeliverUnsubscription(ProcessName, topic, SiteName, OutSequenceNumber));
             thread.Start();
         }
         public override string ToString()

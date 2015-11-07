@@ -50,7 +50,21 @@ namespace PuppetMaster
 
             //TODO: SEND EACH LINE TO THE PUPPETMASTER
             foreach (string line in lines)
+
+            {
+                string[] tokens = line.Split(' ');
+                if (tokens[0].Equals("Wait"))
+                {
+                    if (tokens.Length != 2)
+                        continue;
+                    int numVal = Int32.Parse(tokens[1]);
+                    System.Threading.Thread.Sleep(numVal);
+                }
+                else
+                  this.master.SendCommand(line);
                 Console.WriteLine(line);
+            }
+               
 
             this.GroupBox.Clear();
         }

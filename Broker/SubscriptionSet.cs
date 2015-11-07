@@ -26,7 +26,10 @@ namespace Broker
 
         public void RemoveSubscriber(string processName)
         {
-            Processes.Remove(processName);
+            if (!Processes.Remove(processName))
+            {
+                Console.Out.WriteLine(processName + " is already unsubscribed to " + Topic +".");
+            }
         }
 
         public bool IsSubscribed(string processName)

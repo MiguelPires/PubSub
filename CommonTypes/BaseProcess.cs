@@ -59,7 +59,6 @@ namespace CommonTypes
                         Console.Out.WriteLine("I'm already frozen!");
                         Console.ResetColor();
                         break;
-
                     default:
                         CommandBacklog.Enqueue(command);
                         break;

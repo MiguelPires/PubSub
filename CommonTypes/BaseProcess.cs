@@ -113,7 +113,7 @@ namespace CommonTypes
                         this.RoutingPolicy = RoutingPolicy.Filter;
                     else
                     {
-                        Console.Out.WriteLine("Unkown setting for Routing Policy");
+                        Console.Out.WriteLine("Unknown setting for Routing Policy");
                         return;
                     }
 
@@ -126,7 +126,7 @@ namespace CommonTypes
                         this.LoggingLevel = LoggingLevel.Light;
                     else
                     {
-                        Console.Out.WriteLine("Unkown setting for Logging Level");
+                        Console.Out.WriteLine("Unknown setting for Logging Level");
                         return;
                     }
                     break;

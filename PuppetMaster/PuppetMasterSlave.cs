@@ -15,7 +15,7 @@ namespace PuppetMaster
         // the PuppetMasterMaster object
         public IPuppetMasterMaster Master { get; private set; }
 
-        public PuppetMasterSlave(string siteName) : base (siteName)
+        public PuppetMasterSlave(string siteName) : base(siteName)
         {
             LocalProcesses = new Dictionary<string, IProcess>();
         }
@@ -31,7 +31,7 @@ namespace PuppetMaster
         /// <param name="processName"> The process name </param>
         /// <param name="processType"> The process type </param>
         /// <param name="processUrl"> The process Url </param>
-         void IPuppetMasterSlave.LaunchProcess(string processName, string processType, string processUrl)
+        void IPuppetMasterSlave.LaunchProcess(string processName, string processType, string processUrl)
         {
             base.LaunchProcess(processName, processType, processUrl);
         }
@@ -47,7 +47,7 @@ namespace PuppetMaster
                         this.RoutingPolicy = RoutingPolicy.Filter;
                     else
                     {
-                        Console.Out.WriteLine("Unkown setting for Routing Policy");
+                        Console.Out.WriteLine("Unknown setting for Routing Policy");
                         return;
                     }
 
@@ -60,7 +60,7 @@ namespace PuppetMaster
                         this.LoggingLevel = LoggingLevel.Light;
                     else
                     {
-                        Console.Out.WriteLine("Unkown setting for Logging Level");
+                        Console.Out.WriteLine("Unknown setting for Logging Level");
                         return;
                     }
                     break;
@@ -79,20 +79,40 @@ namespace PuppetMaster
                     }
                     break;
             }
-            Console.Out.WriteLine(settingType + " set to " +settingValue);
+
+            Console.Out.WriteLine(settingType + " set to " + settingValue);
         }
 
-
+        void IPuppetMasterSlave.DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee)
+        {
+            foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
+            {
+                Console.Out.WriteLine("entry key : " + entry.Key);
+                if (entry.Key.Equals("broker"))
+                {
+                    continue;
+                }
+                Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
+                threadx.Start();
+                threadx.Join();
+                Thread thready = new Thread(() => entry.Value.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString()));
+                thready.Start();
+                thready.Join();
+                Thread threadz = new Thread(() => entry.Value.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString()));
+                threadz.Start();
+                threadz.Join();
+            }
+        }
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
-            
+
             string processName = commandArgs[0];
             if (processName.Equals("all"))
             {
                 foreach (var proc in LocalProcesses.Values)
                 {
                     // the process doesn't need to receive it's own name (first index in commandArgs)
-                    proc.DeliverCommand(new string[1] {commandArgs[1]});
+                    proc.DeliverCommand(new string[1] { commandArgs[1] });
                 }
             }
             else
@@ -123,8 +143,8 @@ namespace PuppetMaster
         void IPuppetMasterSlave.RegisterWithMaster(string siteParent, string masterSite)
         {
             ParentSite = siteParent;
-            string url = "tcp://localhost:" + UtilityFunctions.GetPort(SiteName) + "/"+ masterSite;
-            Master = (IPuppetMasterMaster) Activator.GetObject(typeof (IPuppetMasterMaster), url);
+            string url = "tcp://localhost:" + UtilityFunctions.GetPort(SiteName) + "/" + masterSite;
+            Master = (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), url);
         }
 
 
@@ -165,6 +185,6 @@ namespace PuppetMaster
             return "PuppetMasterSlave";
         }
 
-        
+
     }
 }

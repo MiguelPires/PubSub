@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace CommonTypes
 {
@@ -42,6 +43,7 @@ namespace CommonTypes
         void DeliverCommand(string[] commandArgs);
         void SendLog(string log);
         void RegisterWithMaster(string siteParent, string masterName);
+        void DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee);
     }
 
     /// <summary>
@@ -130,7 +132,9 @@ namespace CommonTypes
         public static int GetPort(string siteName)
         {
             // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
-            return 8080 + int.Parse(siteName[siteName.Length - 1].ToString());
+            var a = Regex.Match(siteName, @"\d+").Value;
+            var siteNumber = Int32.Parse(a);
+            return (8080 + siteNumber);
         }
 
         /// <summary>

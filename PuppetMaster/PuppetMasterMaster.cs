@@ -40,8 +40,8 @@ namespace PuppetMaster
             // inform every broker of it's siblings
             foreach (string[] brokerArgs in BrokersStartup)
             {
-                Console.Out.WriteLine("Broker "+brokerArgs[1]);
-                IBroker broker = (IBroker) Activator.GetObject(typeof (IBroker), brokerArgs[1]);
+                Console.Out.WriteLine("Broker " + brokerArgs[1]);
+                IBroker broker = (IBroker)Activator.GetObject(typeof(IBroker), brokerArgs[1]);
                 foreach (string[] siblingArgs in BrokersStartup)
                 {
                     if (brokerArgs[0] == siblingArgs[0] && brokerArgs[1] != siblingArgs[1])
@@ -52,6 +52,30 @@ namespace PuppetMaster
                     }
                 }
             }
+
+
+            foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
+            {
+                Console.Out.WriteLine("entry key : " + entry.Key);
+
+                Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
+
+                Thread thready = new Thread(() => entry.Value.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString()));
+
+                Thread threadz = new Thread(() => entry.Value.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString()));
+
+                threadx.Start();
+                thready.Start();
+                threadz.Start();
+
+
+            }
+            foreach (IPuppetMasterSlave slave in Slaves.Values)
+            {
+                Thread threadx = new Thread(() => slave.DeliverSettingsToLocalProcesses( this.OrderingGuarantee.ToString(), this.RoutingPolicy.ToString(), this.LoggingLevel.ToString()));
+                threadx.Start();
+            }
+
         }
 
 
@@ -91,7 +115,7 @@ namespace PuppetMaster
                 // deliver command to every local process
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
-                    proc.DeliverCommand(new[] {puppetArgs[1]});
+                    proc.DeliverCommand(new[] { puppetArgs[1] });
                 }
             }
             else
@@ -251,11 +275,13 @@ namespace PuppetMaster
 
             this.SiteProcesses[processName] = siteName;
 
+
+
             // we need to keep track of all broker to inform them of the other brokers at their site
             // this can only be done in the end of the parsing 
             if (processType == "broker")
             {
-                BrokersStartup.Add(new[] {siteName, processUrl});
+                BrokersStartup.Add(new[] { siteName, processUrl });
             }
 
             // if the site is this site
@@ -274,6 +300,8 @@ namespace PuppetMaster
             {
                 Console.WriteLine("Config wasn't delivered to the site '" + siteName + "'");
             }
+
+
         }
 
         private void ParseSite(string[] tokens)
@@ -365,7 +393,7 @@ namespace PuppetMaster
                 Console.WriteLine("Connecting to " + siteUrl);
 
                 IPuppetMasterSlave slave =
-                    (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), siteUrl);
+                    (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), siteUrl);
                 slave.Ping();
                 slave.RegisterWithMaster(siteParent, SiteName);
 

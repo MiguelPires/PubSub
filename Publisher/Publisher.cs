@@ -19,11 +19,21 @@ namespace Publisher
         {
             Brokers = new List<IBroker>();
             List<string> brokerUrls = GetBrokers(puppetMasterUrl);
-
+            OutSequenceNumber = 0;
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
-                try
+                UtilityFunctions.ConnectFunction<IBroker> fun = (string urlToConnect) =>
+                {
+                    IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), urlToConnect);
+                    parentBroker.RegisterPubSub(ProcessName, Url);
+
+                    return parentBroker;
+                };
+
+                var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 0, 5, brokerUrl);
+                Brokers.Add(parBroker);
+                /*try
                 {
                     IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
                     parentBroker.RegisterPubSub(ProcessName, Url);
@@ -32,7 +42,7 @@ namespace Publisher
                 catch (SocketException)
                 {
                     Console.Out.WriteLine(processName+" couldn't connect to "+brokerUrl);
-                }
+                }*/
             }
         }
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.Remoting;
+using System.Runtime.Remoting.Messaging;
 
 namespace CommonTypes
 {
@@ -29,7 +30,8 @@ namespace CommonTypes
         public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.Fifo;
         // the routing setting
         public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
-
+        //Number of Retries to connect
+        public const int NumberOfRetries = 5;
         protected BaseProcess(string processName, string processUrl, string puppetMasterUrl, string siteName)
         {
             ProcessName = processName;
@@ -45,7 +47,10 @@ namespace CommonTypes
             this.OrderingGuarantee = PuppetMaster.GetOrderingGuarantee();
             this.RoutingPolicy = PuppetMaster.GetRoutingPolicy();
         }
-
+        /// <summary>
+        /// Delivers a command to a process
+        /// </summary>
+        /// <param name="command"> The command to pass to the process</param>
         public virtual void DeliverCommand(string[] command)
         {
             if (Status == Status.Frozen)
@@ -155,42 +160,55 @@ namespace CommonTypes
         /// <returns></returns>
         public List<string> GetBrokers(string puppetMasterUrl)
         {
-            // TODO: Refactor this 
+            UtilityFunctions.ConnectFunction<List<string>> fun = (string url) =>
+            {
+                List<string> brokerUrls = null;
+
+                // connects to the specified site's puppetMaster
+                IPuppetMasterSlave puppetMasterSlave =
+                    (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), url);
+                brokerUrls = puppetMasterSlave.GetBrokers();
+
+                return brokerUrls;
+            };
+
+            //var fun = new UtilityFunctions.ConnectFunction<List<string>>(GetBrokersFunc);
+            List<string> brokersUrlsResult = UtilityFunctions.TryConnection<List<string>>(fun, 0, 5, puppetMasterUrl);
+            return brokersUrlsResult;
+        }
+       /* protected List<string> GetBrokersFunc(string puppetMasterUrl)
+        {
+            List<string> brokerUrls = null;
 
             // connects to the specified site's puppetMaster
             IPuppetMasterSlave puppetMasterSlave =
-                (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), puppetMasterUrl);
+                (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), puppetMasterUrl);
+            brokerUrls = puppetMasterSlave.GetBrokers();
 
-            List<string> brokerUrls;
-            try
-            {
-                // obtains the broker urls at that site - these urls are probably going to be stored for reconnection later
-                brokerUrls = puppetMasterSlave.GetBrokers();
-            }
-            catch (RemotingException)
-            {
-                IPuppetMasterMaster newPuppetMaster =
-                    (IPuppetMasterMaster) Activator.GetObject(typeof (IPuppetMasterMaster), puppetMasterUrl);
-                brokerUrls = newPuppetMaster.GetBrokers();
-            }
             return brokerUrls;
-        }
-
+        }*/
+        
         private void ConnectToPuppetMaster(string puppetMasterUrl)
         {
             // connects to the specified site's puppetMaster
-            PuppetMaster = (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), puppetMasterUrl);
+            UtilityFunctions.ConnectFunction<IPuppetMaster> fun = (string url) =>
+            {
+                IPuppetMaster puppet = (IPuppetMaster)Activator.GetObject(typeof(IPuppetMaster), url);
+                puppet.Ping();
 
+                return puppet;
+            };
+
+            IPuppetMaster puppetMaster = UtilityFunctions.TryConnection<IPuppetMaster>(fun, 0, 5, puppetMasterUrl);
             try
             {
-                PuppetMaster.Ping();
+                PuppetMaster = (IPuppetMasterSlave) puppetMaster;
             }
             catch (Exception)
             {
-                PuppetMaster =
-                    (IPuppetMasterMaster) Activator.GetObject(typeof (IPuppetMasterMaster), puppetMasterUrl);
-                PuppetMaster.Ping();
+                    PuppetMaster = (IPuppetMasterMaster)puppetMaster; 
             }
+
         }
 
         public override object InitializeLifetimeService()

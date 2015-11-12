@@ -17,22 +17,21 @@ namespace Subscriber
             : base(processName, processUrl, puppetMasterUrl, siteName)
         {
             Brokers = new List<IBroker>();
-
-            List<string> brokerUrls = GetBrokers(puppetMasterUrl);
-
+            var brokerUrls = GetBrokers(puppetMasterUrl);
+            OutSequenceNumber = 0;
             // connect to the brokers at the site
-            foreach (string brokerUrl in brokerUrls)
+            foreach (var brokerUrl in brokerUrls)
             {
-                try
-                {
-                    IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), brokerUrl);
-                    parentBroker.RegisterPubSub(ProcessName, Url);
-                    Brokers.Add(parentBroker);
-                }
-                catch (SocketException)
-                {
-                    Console.Out.WriteLine(processName + " couldn't connect to " + brokerUrl);
-                }
+                UtilityFunctions.ConnectFunction<IBroker> fun = (string url) =>
+                    {
+                        IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), url);
+                        parentBroker.RegisterPubSub(ProcessName, Url);
+
+                        return parentBroker;
+                    };
+
+                var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 500, 5, brokerUrl);
+                Brokers.Add(parBroker);
             }
         }
 

@@ -93,7 +93,7 @@ namespace CommonTypes
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
         void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber);
-        void DeliverUnsubscription(string origin, string topic,string siteName, int sequenceNumber);
+        void DeliverUnsubscription(string origin, string topic, string siteName, int sequenceNumber);
         void DeliverPublication(string origin, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
@@ -105,8 +105,9 @@ namespace CommonTypes
     {
         void AddLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
         void RemoveLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
-       /* void AddRemoteSubscription(string topic, string process);
-        void RemoveRemoteSubscription(string topic, string process);*/
+        void UpdatePublisherSequenceNumber(string process, int sequenceNumber);
+        /* void AddRemoteSubscription(string topic, string process);
+         void RemoveRemoteSubscription(string topic, string process);*/
     }
 
     public interface IPublisher : IProcess
@@ -178,6 +179,44 @@ namespace CommonTypes
             name = lastParts.Last();
 
             return true;
+        }
+        public delegate T ConnectFunction<T>(string url);
+        /// <summary>
+        /// TryConnection function executes a maximum "numberOfTries" times a generic connection attempt (func) between each "timeInterval".
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="func">A connectFunction delegate </param>
+        /// <param name="timeInterval">time between each try in ms</param>
+        /// <param name="numberOfTries">the number of tries</param>
+        /// <param name="url">the url to connect</param>
+        /// <returns></returns>
+        public static T TryConnection<T>(ConnectFunction<T> func, int timeInterval, int numberOfTries, string url)
+        {
+            var retryCount = numberOfTries;
+            var success = false;
+
+            var result = default(T);
+            while (!success && retryCount > 0)
+            {
+                try
+                {
+                    result=func(url);
+                    success = true;
+                }
+                catch (Exception)
+                {
+                    retryCount--;
+
+                    if (retryCount == 0)
+                    {
+                        Console.Out.WriteLine("Error: Couldn't connect after " + numberOfTries + " tries. " + func);
+                        throw; //or handle error and break/return
+                    }
+                    if (timeInterval != 0)
+                        System.Threading.Thread.Sleep(timeInterval);
+                }
+            }
+            return result;
         }
     }
 }

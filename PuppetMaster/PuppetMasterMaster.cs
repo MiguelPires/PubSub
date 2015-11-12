@@ -54,9 +54,9 @@ namespace PuppetMaster
             }
 
 
-            foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
+            /*foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
             {
-                Console.Out.WriteLine("entry key : " + entry.Key);
+               // Console.Out.WriteLine("entry key : " + entry.Key);
 
                 Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
 
@@ -74,7 +74,7 @@ namespace PuppetMaster
             {
                 Thread threadx = new Thread(() => slave.DeliverSettingsToLocalProcesses( this.OrderingGuarantee.ToString(), this.RoutingPolicy.ToString(), this.LoggingLevel.ToString()));
                 threadx.Start();
-            }
+            }*/
 
         }
 
@@ -199,6 +199,10 @@ namespace PuppetMaster
                     break;
 
                 case "Publisher":
+                    if (tokens.Length != 8)
+                    {
+                        throw new CommandParsingException("Unknown command: " + command);
+                    }
                     args[0] = tokens[1]; // process name
                     args[1] = "Publish";
                     args[2] = tokens[3]; // number of events
@@ -392,12 +396,25 @@ namespace PuppetMaster
             {
                 Console.WriteLine("Connecting to " + siteUrl);
 
-                IPuppetMasterSlave slave =
+                             
+                UtilityFunctions.ConnectFunction<IPuppetMasterSlave> fun = (string urlToConnect) =>
+                    {
+                        IPuppetMasterSlave pmslave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), urlToConnect);
+                        pmslave.Ping();
+                        pmslave.RegisterWithMaster(siteParent, SiteName);
+
+                        return pmslave;
+                    };
+
+                var slave = UtilityFunctions.TryConnection<IPuppetMasterSlave>(fun, 500, 5, siteUrl);
+                Slaves.Add(name,slave);
+
+                /*IPuppetMasterSlave slave =
                     (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), siteUrl);
                 slave.Ping();
                 slave.RegisterWithMaster(siteParent, SiteName);
 
-                Slaves.Add(name, slave);
+                Slaves.Add(name, slave);*/
                 return slave;
             }
             catch (SocketException)

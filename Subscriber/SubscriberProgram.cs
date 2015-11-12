@@ -29,7 +29,10 @@ namespace Subscriber
             string siteName = args[3];
 
             Subscriber subscriber = new Subscriber(processName, processUrl, puppetMasterUrl, siteName);
-
+            Console.Out.WriteLine("Config:");
+            Console.Out.WriteLine("OrderingGuarantee: {0}", subscriber.OrderingGuarantee);
+            Console.Out.WriteLine("RoutingPolicy: {0}", subscriber.RoutingPolicy);
+            Console.Out.WriteLine("LoggingLevel: {0}", subscriber.LoggingLevel);
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
@@ -51,7 +54,7 @@ namespace Subscriber
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(ISubscriber));
 
-            Console.WriteLine(@"Running a " + subscriber + " at " + processUrl);
+            Console.WriteLine(@"Running a " + subscriber + " at " + processUrl + " [Site:" + siteName + "]");
             Console.ReadLine();
         }
     }

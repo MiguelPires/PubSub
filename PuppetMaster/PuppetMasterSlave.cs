@@ -87,11 +87,7 @@ namespace PuppetMaster
         {
             foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
             {
-                Console.Out.WriteLine("entry key : " + entry.Key);
-                if (entry.Key.Equals("broker"))
-                {
-                    continue;
-                }
+                //Console.Out.WriteLine("entry key : " + entry.Key);
                 Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
                 threadx.Start();
                 threadx.Join();

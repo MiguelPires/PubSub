@@ -48,9 +48,21 @@ namespace Broker
             // connect to the brokers at the parent site
             foreach (string brokerUrl in brokerUrls)
             {
-                IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
+
+                UtilityFunctions.ConnectFunction<IBroker> fun = (string urlToConnect) =>
+                {
+                    IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), urlToConnect);
+                    parentBroker.RegisterBroker(SiteName, Url);
+
+                    return parentBroker;
+                };
+
+                var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 0, 5, brokerUrl);
+                ParentBrokers.Add(parBroker);
+
+                /*IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
                 parentBroker.RegisterBroker(SiteName, Url);
-                ParentBrokers.Add(parentBroker);
+                ParentBrokers.Add(parentBroker);*/
             }
         }
 
@@ -71,7 +83,7 @@ namespace Broker
                 siteBrokers = new List<IBroker>();
             }
 
-            siteBrokers.Add((IBroker) Activator.GetObject(typeof (IBroker), brokerUrl));
+            siteBrokers.Add((IBroker)Activator.GetObject(typeof(IBroker), brokerUrl));
             Children[siteName] = siteBrokers;
         }
 
@@ -85,7 +97,7 @@ namespace Broker
             if (LocalProcesses.ContainsKey(procName))
                 Console.WriteLine("There already is a process named " + procName + " at this broker (replaced anyway)");
 
-            LocalProcesses[procName] = (IProcess) Activator.GetObject(typeof (IProcess), procUrl);
+            LocalProcesses[procName] = (IProcess)Activator.GetObject(typeof(IProcess), procUrl);
         }
 
         public void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber)
@@ -190,15 +202,76 @@ namespace Broker
 
             MessageProcessed(origin, sequenceNumber);
         }
-
+        /// <summary>
+        /// Origin is the origin process name.
+        /// </summary>
+        /// <param name="origin"></param>
+        /// <param name="topic"></param>
+        /// <param name="publication"></param>
+        /// <param name="fromSite"></param>
+        /// <param name="sequenceNumber"></param>
         public void DeliverPublication(string origin, string topic, string publication, string fromSite, int sequenceNumber)
         {
+            Console.Out.WriteLine("********DeliverPublication********");
             if (!PublicationReceived(origin, topic, publication, fromSite, sequenceNumber))
+            {
                 return;
+            }
+
 
             Console.Out.WriteLine("Receiving publication on topic " + topic + " from  " + origin);
             SubscriptionSet subs;
-            if (RoutingTable.TryGetValue(topic, out subs))
+            if (this.RoutingPolicy == RoutingPolicy.Flood)
+            {
+                foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
+                {
+                    try
+                    {
+                        ISubscriber sub = (ISubscriber)entry.Value;
+                        sub.DeliverPublication(publication, sequenceNumber);
+
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    // Console.Out.WriteLine("entry key : " + entry.Key);
+                }
+                Random rand = new Random();
+
+                foreach (KeyValuePair<string, List<IBroker>> child in Children)
+                {
+                    // picks a random broker for load-balancing purposes
+                    List<IBroker> childBrokers = child.Value;
+                    int childIndex = rand.Next(0, childBrokers.Count);
+                    Console.Out.WriteLine("childIndex:" + childIndex + " childbrokers.count:" + childBrokers.Count);
+                    // we don't send the SubscriptionSet to where it came from
+                    if (!child.Key.Equals(fromSite))
+                    {
+                        IBroker childBroker = childBrokers[childIndex];
+                        Thread thread =
+                            new Thread(
+                                () =>
+                                    childBroker.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
+                        thread.Start();
+                    }
+                }
+
+                // we don't send the subscription to where it came from
+                if (!ParentSite.Equals(fromSite) && !ParentSite.Equals("none"))
+                {
+                    // picks a random broker for load-balancing purposes
+                    int parentIndex = rand.Next(0, ParentBrokers.Count);
+                    IBroker parent = ParentBrokers[parentIndex];
+
+                    Thread thread =
+                        new Thread(
+                            () =>
+                                parent.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
+                    thread.Start();
+                }
+            }
+            else if (RoutingTable.TryGetValue(topic, out subs))
             {
                 IDictionary<string, string> matchList = subs.GetMatchList();
                 List<string> SentSites = new List<string>();
@@ -212,9 +285,9 @@ namespace Broker
                     IProcess proc;
                     if (LocalProcesses.TryGetValue(match.Key, out proc))
                     {
-                        Console.Out.WriteLine("Sending publication to "+match.Key);
+                        Console.Out.WriteLine("Sending publication to " + match.Key);
 
-                        ISubscriber subscriber = (ISubscriber) proc;
+                        ISubscriber subscriber = (ISubscriber)proc;
                         Thread thread =
                             new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
                         thread.Start();
@@ -252,12 +325,14 @@ namespace Broker
                     }
                 }
             }
+            MessageProcessed(origin, sequenceNumber);
+            ForwardLocalPublication(origin, InSequenceNumbers[origin]);
         }
 
         public void AddSiblingBroker(string siblingUrl)
         {
             Console.Out.WriteLine("Received sibling " + siblingUrl);
-            IBroker sibling = (IBroker) Activator.GetObject(typeof (IBroker), siblingUrl);
+            IBroker sibling = (IBroker)Activator.GetObject(typeof(IBroker), siblingUrl);
             SiblingBrokers.Add(sibling);
         }
 
@@ -292,7 +367,7 @@ namespace Broker
                 default:
                     ProcessInternalCommandOrMessage(command);
                     break;
-                // subscriber specific commands
+                    // subscriber specific commands
             }
         }
 
@@ -303,7 +378,7 @@ namespace Broker
             {
                 SubscriptionSet set = entry.Value;
                 foreach (var process in set.Processes)
-                    Console.Out.WriteLine("\t"+process.Key+" is subscribed to "+entry.Key);
+                    Console.Out.WriteLine("\t" + process.Key + " is subscribed to " + entry.Key);
             }
             Console.Out.WriteLine("*******************");
         }
@@ -356,6 +431,13 @@ namespace Broker
 
             subscriptionSet.RemoveSubscriber(process);
         }
+
+        public void UpdatePublisherSequenceNumber(string process, int sequenceNumber)
+        {
+            //Console.Out.WriteLine("process:{0} sqNumber:{1}", process, sequenceNumber);
+            InSequenceNumbers[process] = sequenceNumber;
+        }
+
         /// <summary>
         ///     This method sends the local subscription to the other brokers
         /// </summary>
@@ -384,8 +466,22 @@ namespace Broker
         ///     This method should be called after a received message was processed. It increments the sequenceNumber
         ///     and executes the command with the next sequence number
         /// </summary>
-        /// <param name="origin"> Process/group name </param>
+        /// <param name="processName"> Process/group name </param>
         /// <param name="sequenceNumber"> sequence number </param>
+
+
+        /// <summary>
+        ///     This method updates the sequenceNumber on the given process name for all replicas
+        /// </summary>
+        private void ForwardLocalPublication(string processName, int sequenceNumber)
+        {
+            foreach (IBroker replica in SiblingBrokers)
+            {
+                Thread thread =
+                    new Thread(() => replica.UpdatePublisherSequenceNumber(processName, sequenceNumber));
+                thread.Start();
+            }
+        }
         private void MessageProcessed(string origin, int sequenceNumber)
         {
             if (this.OrderingGuarantee != OrderingGuarantee.Fifo)
@@ -396,6 +492,10 @@ namespace Broker
             if (HoldbackQueue.TryGetValue(origin, out queue))
             {
                 string[] command = queue.GetCommand(sequenceNumber + 1);
+                if (command == null)
+                {
+                    return;
+                }
                 ProcessInternalCommandOrMessage(command);
             }
         }
@@ -457,9 +557,7 @@ namespace Broker
             }
 
             int lastNumber;
-            if (InSequenceNumbers.TryGetValue(origin, out lastNumber))
-                InSequenceNumbers[origin] = 0;
-            else
+            if (!InSequenceNumbers.TryGetValue(origin, out lastNumber))
                 lastNumber = 0;
 
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
@@ -498,9 +596,7 @@ namespace Broker
             }
 
             int lastNumber;
-            if (InSequenceNumbers.TryGetValue(origin, out lastNumber))
-                InSequenceNumbers[origin] = 0;
-            else
+            if (!InSequenceNumbers.TryGetValue(origin, out lastNumber))
                 lastNumber = 0;
 
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
@@ -533,6 +629,7 @@ namespace Broker
         /// <returns></returns>
         private bool PublicationReceived(string origin, string topic, string publication, string fromSite, int sequenceNumber)
         {
+            //Console.Out.WriteLine("origin:" + origin + " topic:" + topic + " publi:" + publication + " fromSite:" + fromSite + " sqN:" + sequenceNumber);
             string[] eventMessage = new string[6];
             eventMessage[0] = "DeliverPublication";
             eventMessage[1] = origin;
@@ -548,11 +645,9 @@ namespace Broker
             }
 
             int lastNumber;
-            if (InSequenceNumbers.TryGetValue(origin, out lastNumber))
-                InSequenceNumbers[origin] = 0;
-            else
+            if (!InSequenceNumbers.TryGetValue(origin, out lastNumber))
                 lastNumber = 0;
-
+            //Console.Out.WriteLine("lastNumber:" + lastNumber);
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
             {
                 Console.Out.WriteLine("Delayed message detected. Queueing");

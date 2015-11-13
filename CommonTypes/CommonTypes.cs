@@ -51,7 +51,7 @@ namespace CommonTypes
     /// </summary>
     public interface IPuppetMasterMaster : IPuppetMaster
     {
-        void DeliverLog(string log);
+        //void DeliverLog(string log);
         void SendCommand(string command);
     }
 
@@ -65,6 +65,7 @@ namespace CommonTypes
         RoutingPolicy GetRoutingPolicy();
         LoggingLevel GetLoggingLevel();
         OrderingGuarantee GetOrderingGuarantee();
+        void DeliverLog(string log);
     }
 
     /// <summary>
@@ -80,10 +81,10 @@ namespace CommonTypes
     /// <summary>
     ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
     /// </summary>
-    public interface IProcessMaster
+    /*public interface IProcessMaster
     {
         void DeliverLogToPuppetMaster(string log);
-    }
+    }*/
 
     /// <summary>
     ///     The interface for the Brokers

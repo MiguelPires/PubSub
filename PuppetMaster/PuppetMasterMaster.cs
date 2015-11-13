@@ -8,7 +8,7 @@ using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMasterMaster : BasePuppet, IPuppetMasterMaster, IProcessMaster
+    public class PuppetMasterMaster : BasePuppet, IPuppetMasterMaster
     {
         // GUI
         public InteractionForm Form { get; set; }
@@ -18,8 +18,6 @@ namespace PuppetMaster
         public List<string[]> BrokersStartup { get; }
         // maps a process to it's site name
         public IDictionary<string, string> SiteProcesses;
-
-        private delegate void DelegateDeliverMessage(string message);
 
         public PuppetMasterMaster(string siteName) : base(siteName)
         {
@@ -79,14 +77,10 @@ namespace PuppetMaster
         }
 
 
-        void IProcessMaster.DeliverLogToPuppetMaster(string log)
+        void IPuppetMaster.DeliverLog(string message)
         {
-            throw new NotImplementedException();
-        }
-
-        void IPuppetMasterMaster.DeliverLog(string message)
-        {
-            Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message);
+            eventNumber++;
+            Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message + ", " + eventNumber);
         }
 
         void IPuppetMasterMaster.SendCommand(string command)
@@ -109,13 +103,17 @@ namespace PuppetMaster
                 // deliver command to every remote PuppetMaster
                 foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
-                    slave.DeliverCommand(puppetArgs);
+                    Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
+                    thread.Start();
+                    //slave.DeliverCommand(puppetArgs);
                 }
 
                 // deliver command to every local process
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
-                    proc.DeliverCommand(new[] { puppetArgs[1] });
+                    Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
+                    thread.Start();
+                    //proc.DeliverCommand(new[] { puppetArgs[1] });
                 }
             }
             else
@@ -138,12 +136,18 @@ namespace PuppetMaster
                     string[] processArgs = new string[puppetArgs.Length - 1];
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
                     IProcess process = LocalProcesses[processName];
-                    process.DeliverCommand(processArgs);
+
+                    Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+                    thread.Start();
+                   // process.DeliverCommand(processArgs);
                 }
                 else
                 {
                     IPuppetMasterSlave puppetMaster = Slaves[site];
-                    puppetMaster.DeliverCommand(puppetArgs);
+
+                    Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
+                    thread.Start();
+                    //puppetMaster.DeliverCommand(puppetArgs);
                 }
             }
         }
@@ -316,7 +320,9 @@ namespace PuppetMaster
             if (tokens[1].Equals(SiteName))
                 ParentSite = siteParent;
             else
+            {
                 ConnectToSite(siteName, siteParent);
+            }
         }
 
         private void ParseOrdering(string[] tokens)
@@ -335,12 +341,7 @@ namespace PuppetMaster
                     this.OrderingGuarantee = OrderingGuarantee.Total;
                     break;
             }
-
-            foreach (IPuppetMasterSlave slave in Slaves.Values)
-            {
-                slave.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString());
-                Console.Out.WriteLine(this.OrderingGuarantee.ToString());
-            }
+          
         }
 
         private void ParseRouting(string[] tokens)
@@ -351,14 +352,9 @@ namespace PuppetMaster
                     this.RoutingPolicy = RoutingPolicy.Flood;
                     break;
 
-                case "filter":
+                case "filtering":
                     this.RoutingPolicy = RoutingPolicy.Filter;
                     break;
-            }
-            foreach (IPuppetMasterSlave slave in Slaves.Values)
-            {
-                slave.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString());
-                Console.Out.WriteLine(this.RoutingPolicy.ToString());
             }
         }
 
@@ -374,12 +370,7 @@ namespace PuppetMaster
                     this.LoggingLevel = LoggingLevel.Light;
                     break;
             }
-
-            foreach (IPuppetMasterSlave slave in Slaves.Values)
-            {
-                slave.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString());
-                Console.Out.WriteLine(this.LoggingLevel.ToString());
-            }
+            
         }
 
         /// <summary>
@@ -402,12 +393,27 @@ namespace PuppetMaster
                         IPuppetMasterSlave pmslave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), urlToConnect);
                         pmslave.Ping();
                         pmslave.RegisterWithMaster(siteParent, SiteName);
-
+                        pmslave.DeliverSetting("RoutingPolicy",
+                            RoutingPolicy == RoutingPolicy.Filter ? "filtering" : "flooding");
+                        pmslave.DeliverSetting("LoggingLevel", LoggingLevel == LoggingLevel.Full ? "full" : "light");
+                        switch (OrderingGuarantee)
+                        {
+                            case OrderingGuarantee.Fifo:
+                                pmslave.DeliverSetting("OrderingGuarantee", "FIFO");
+                                break;
+                            case OrderingGuarantee.No:
+                                pmslave.DeliverSetting("OrderingGuarantee", "NO");
+                                break;
+                            case OrderingGuarantee.Total:
+                                pmslave.DeliverSetting("OrderingGuarantee", "TOTAL");
+                                break;
+                        }
                         return pmslave;
                     };
 
                 var slave = UtilityFunctions.TryConnection<IPuppetMasterSlave>(fun, 500, 5, siteUrl);
                 Slaves.Add(name,slave);
+                
 
                 /*IPuppetMasterSlave slave =
                     (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), siteUrl);

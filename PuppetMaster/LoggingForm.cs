@@ -15,7 +15,7 @@ namespace PuppetMaster
 
         public void DeliverMessage(string log)
         {
-            this.LogBox.Text += log + "\r\n";
+            LogBox.Text += log + "\r\n";
         }
 
         private void label1_Click(object sender, EventArgs e)

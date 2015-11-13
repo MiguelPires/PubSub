@@ -41,11 +41,6 @@ namespace PuppetMaster
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof (IPuppetMasterSlave));
 
-            Console.Out.WriteLine("Config:");
-            Console.Out.WriteLine("OrderingGuarantee: {0}", puppet.OrderingGuarantee);
-            Console.Out.WriteLine("RoutingPolicy: {0}", puppet.RoutingPolicy);
-            Console.Out.WriteLine("LoggingLevel: {0}", puppet.LoggingLevel);
-
             string url = "tcp://localhost:" + port + "/" + siteName;
             Console.WriteLine(@"Running a " + puppet + " at " + url);
 

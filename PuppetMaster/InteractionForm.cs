@@ -34,7 +34,9 @@ namespace PuppetMaster
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
             this.master.SendCommand(this.IndividualBox.Text.Trim());
+            this.logBox.Text += this.IndividualBox.Text + "\r\n";
             this.IndividualBox.Clear();
+            
         }
 
         private void GroupBox_TextChanged(object sender, EventArgs e)
@@ -64,8 +66,8 @@ namespace PuppetMaster
                   this.master.SendCommand(line);
                 Console.WriteLine(line);
             }
-               
 
+            this.logBox.Text += this.GroupBox.Text + "\r\n";
             this.GroupBox.Clear();
         }
     }

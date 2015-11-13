@@ -25,11 +25,11 @@ namespace CommonTypes
         // a list with messages received in the frozen state
         public List<string[]> FrozenMessages { get; set; }
         // the logging setting
-        public LoggingLevel LoggingLevel = LoggingLevel.Light;
+        public LoggingLevel LoggingLevel;
         // the ordering setting
-        public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.Fifo;
+        public OrderingGuarantee OrderingGuarantee;
         // the routing setting
-        public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
+        public RoutingPolicy RoutingPolicy;
         //Number of Retries to connect
         public const int NumberOfRetries = 5;
         protected BaseProcess(string processName, string processUrl, string puppetMasterUrl, string siteName)
@@ -74,7 +74,7 @@ namespace CommonTypes
                 switch (command[0])
                 {
                     case "Status":
-                        Console.Out.WriteLine("Status information:\r\nSubscriptions, etc...");
+                        Console.Out.WriteLine("\t" + "**** Status *****");
                         break;
 
                     case "Crash":

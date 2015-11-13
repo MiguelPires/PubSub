@@ -131,7 +131,7 @@ namespace Broker
                 {
                     IBroker childBroker = childBrokers[childIndex];
                     Thread thread =
-                        new Thread(() => childBroker.DeliverSubscription(ProcessName, topic, SiteName, sequenceNumber));
+                        new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName, sequenceNumber));//estava ProcessName antes no origin
                     thread.Start();
                 }
             }
@@ -149,6 +149,8 @@ namespace Broker
             }
 
             MessageProcessed(origin, sequenceNumber);
+
+            
         }
 
 
@@ -229,6 +231,8 @@ namespace Broker
                     {
                         ISubscriber sub = (ISubscriber)entry.Value;
                         sub.DeliverPublication(publication, sequenceNumber);
+                        //log:
+                        PuppetMaster.DeliverLog("SubEvent " + entry.Key+ ", " + origin + ", " + topic);
 
                     }
                     catch (Exception)
@@ -244,7 +248,7 @@ namespace Broker
                     // picks a random broker for load-balancing purposes
                     List<IBroker> childBrokers = child.Value;
                     int childIndex = rand.Next(0, childBrokers.Count);
-                    Console.Out.WriteLine("childIndex:" + childIndex + " childbrokers.count:" + childBrokers.Count);
+                    //Console.Out.WriteLine("childIndex:" + childIndex + " childbrokers.count:" + childBrokers.Count);
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(fromSite))
                     {
@@ -254,6 +258,7 @@ namespace Broker
                                 () =>
                                     childBroker.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
                         thread.Start();
+                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
                 }
 
@@ -269,6 +274,7 @@ namespace Broker
                             () =>
                                 parent.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
                     thread.Start();
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
             else if (RoutingTable.TryGetValue(topic, out subs))
@@ -291,6 +297,7 @@ namespace Broker
                         Thread thread =
                             new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
                         thread.Start();
+                        PuppetMaster.DeliverLog("SubEvent " + match.Key + ", " + origin + ", " + topic);
                     }
 
                     // don't send publication to where it came from
@@ -310,6 +317,8 @@ namespace Broker
                         Thread thread =
                             new Thread(() => broker.DeliverPublication(origin, topic, publication, SiteName, sequenceNumber));
                         thread.Start();
+                        if(LoggingLevel==LoggingLevel.Full)
+                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
 
                     if (ParentSite.Equals(match.Value))
@@ -322,6 +331,8 @@ namespace Broker
                         Thread thread =
                             new Thread(() => parent.DeliverPublication(origin, topic, publication, SiteName, sequenceNumber));
                         thread.Start();
+                        if (LoggingLevel == LoggingLevel.Full)
+                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
                 }
             }
@@ -373,14 +384,14 @@ namespace Broker
 
         void PrintStatus()
         {
-            Console.Out.WriteLine("**** Status *****");
+            Console.Out.WriteLine("\t" + "**** Status *****");
             foreach (var entry in RoutingTable)
             {
                 SubscriptionSet set = entry.Value;
                 foreach (var process in set.Processes)
                     Console.Out.WriteLine("\t" + process.Key + " is subscribed to " + entry.Key);
             }
-            Console.Out.WriteLine("*******************");
+            Console.Out.WriteLine("\t" + "*******************");
         }
 
         /// <summary>
@@ -462,17 +473,13 @@ namespace Broker
                 thread.Start();
             }
         }
-        /// <summary>
-        ///     This method should be called after a received message was processed. It increments the sequenceNumber
-        ///     and executes the command with the next sequence number
-        /// </summary>
-        /// <param name="processName"> Process/group name </param>
-        /// <param name="sequenceNumber"> sequence number </param>
 
 
         /// <summary>
-        ///     This method updates the sequenceNumber on the given process name for all replicas
+        /// This method updates the sequenceNumber on the given process name for all replicas
         /// </summary>
+        /// <param name="processName"></param>
+        /// <param name="sequenceNumber"></param>
         private void ForwardLocalPublication(string processName, int sequenceNumber)
         {
             foreach (IBroker replica in SiblingBrokers)

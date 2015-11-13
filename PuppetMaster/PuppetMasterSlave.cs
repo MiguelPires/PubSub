@@ -8,21 +8,29 @@ using CommonTypes;
 
 namespace PuppetMaster
 {
-    public class PuppetMasterSlave : BasePuppet, IPuppetMasterSlave, IProcessMaster
+    public class PuppetMasterSlave : BasePuppet, IPuppetMasterSlave
     {
         // GUI
         public LoggingForm Form { get; set; }
         // the PuppetMasterMaster object
         public IPuppetMasterMaster Master { get; private set; }
-
         public PuppetMasterSlave(string siteName) : base(siteName)
         {
             LocalProcesses = new Dictionary<string, IProcess>();
         }
 
-        void IProcessMaster.DeliverLogToPuppetMaster(string log)
+        void IPuppetMaster.DeliverLog(string message)
         {
-            throw new NotImplementedException();
+            if (!string.IsNullOrEmpty(message))
+            {
+                eventNumber++;
+                Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message + ", " + eventNumber);
+                (new Thread(() => Master.DeliverLog(message))).Start();
+
+            }
+
+            else
+                Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");
         }
 
         /// <summary>
@@ -41,9 +49,9 @@ namespace PuppetMaster
             switch (settingType)
             {
                 case "RoutingPolicy":
-                    if (settingValue.Equals("Flood"))
+                    if (settingValue.Equals("flooding"))
                         this.RoutingPolicy = RoutingPolicy.Flood;
-                    else if (settingValue.Equals("Filter"))
+                    else if (settingValue.Equals("filtering"))
                         this.RoutingPolicy = RoutingPolicy.Filter;
                     else
                     {
@@ -54,9 +62,9 @@ namespace PuppetMaster
                     break;
 
                 case "LoggingLevel":
-                    if (settingValue.Equals("Full"))
+                    if (settingValue.Equals("full"))
                         this.LoggingLevel = LoggingLevel.Full;
-                    else if (settingValue.Equals("Light"))
+                    else if (settingValue.Equals("light"))
                         this.LoggingLevel = LoggingLevel.Light;
                     else
                     {
@@ -66,11 +74,11 @@ namespace PuppetMaster
                     break;
 
                 case "OrderingGuarantee":
-                    if (settingValue.Equals("No"))
+                    if (settingValue.Equals("NO"))
                         this.OrderingGuarantee = OrderingGuarantee.No;
-                    else if (settingValue.Equals("Fifo"))
+                    else if (settingValue.Equals("FIFO"))
                         this.OrderingGuarantee = OrderingGuarantee.Fifo;
-                    else if (settingValue.Equals("Total"))
+                    else if (settingValue.Equals("TOTAL"))
                         this.OrderingGuarantee = OrderingGuarantee.Total;
                     else
                     {
@@ -79,8 +87,7 @@ namespace PuppetMaster
                     }
                     break;
             }
-
-            Console.Out.WriteLine(settingType + " set to " + settingValue);
+            Console.Out.WriteLine(settingType+": "  + settingValue);
         }
 
         void IPuppetMasterSlave.DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee)
@@ -139,7 +146,7 @@ namespace PuppetMaster
         void IPuppetMasterSlave.RegisterWithMaster(string siteParent, string masterSite)
         {
             ParentSite = siteParent;
-            string url = "tcp://localhost:" + UtilityFunctions.GetPort(SiteName) + "/" + masterSite;
+            string url = "tcp://localhost:" + UtilityFunctions.GetPort(siteParent) + "/" + masterSite;
             Master = (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), url);
         }
 

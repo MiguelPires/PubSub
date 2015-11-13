@@ -49,6 +49,10 @@ namespace Subscriber
             {
                 // generic commands
                 case "Status":
+                    base.DeliverCommand(command);
+                    Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
+                    Console.Out.WriteLine("\t" + "*******************");
+                    break;
                 case "Crash":
                 case "Freeze":
                     base.DeliverCommand(command);
@@ -77,7 +81,7 @@ namespace Subscriber
         void ISubscriber.DeliverPublication(string publication, int sequenceNumber)
         {
             // TODO: add sequence number checking
-            Console.Out.WriteLine("Received publication '" + publication + "'");
+                Console.Out.WriteLine("Received publication '" + publication + "'");
         }
 
         public void ProcessFrozenListCommands()

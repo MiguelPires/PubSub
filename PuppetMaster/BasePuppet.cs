@@ -26,7 +26,8 @@ namespace PuppetMaster
         public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.Fifo;
         // the routing setting
         public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
-
+        protected delegate void DelegateDeliverMessage(string message);
+        protected int eventNumber;
         protected BasePuppet(string siteName)
         {
             SiteName = siteName;
@@ -34,6 +35,7 @@ namespace PuppetMaster
             LocalProcesses = new ConcurrentDictionary<string, IProcess>();
             LocalProcessesTypes = new ConcurrentDictionary<string, ProcessType>();
             LocalProcessesUrls = new ConcurrentDictionary<string, string>();
+            eventNumber = 0;
         }
 
         /// <summary>

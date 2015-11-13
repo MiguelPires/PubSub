@@ -61,6 +61,10 @@ namespace Publisher
             {
                 // generic commands
                 case "Status":
+                    base.DeliverCommand(command);
+                    Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
+                    Console.Out.WriteLine("\t" + "*******************");
+                    break;
                 case "Crash":
                 case "Freeze":
                     base.DeliverCommand(command);
@@ -114,7 +118,7 @@ namespace Publisher
 
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
                 ++OutSequenceNumber;
-
+            PuppetMaster.DeliverLog("PubEvent "+ ProcessName+", "+ topic);
             Thread thread =
                           new Thread(() => broker.DeliverPublication(ProcessName, topic, publication, SiteName, OutSequenceNumber));
             thread.Start();

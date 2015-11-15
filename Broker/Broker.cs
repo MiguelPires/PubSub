@@ -133,6 +133,7 @@ namespace Broker
                     Thread thread =
                         new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName, sequenceNumber));//estava ProcessName antes no origin
                     thread.Start();
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
 
@@ -146,6 +147,7 @@ namespace Broker
                 Thread thread =
                     new Thread(() => parent.DeliverSubscription(origin, topic, siteName, sequenceNumber));
                 thread.Start();
+                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
             }
 
             MessageProcessed(origin, sequenceNumber);
@@ -187,6 +189,7 @@ namespace Broker
                     Thread thread =
                         new Thread(() => childBroker.DeliverUnsubscription(ProcessName, topic, SiteName, sequenceNumber));
                     thread.Start();
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
 
@@ -200,6 +203,7 @@ namespace Broker
                 Thread thread =
                     new Thread(() => parent.DeliverUnsubscription(origin, topic, siteName, sequenceNumber));
                 thread.Start();
+                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
             }
 
             MessageProcessed(origin, sequenceNumber);
@@ -337,7 +341,7 @@ namespace Broker
                 }
             }
             MessageProcessed(origin, sequenceNumber);
-            ForwardLocalPublication(origin, InSequenceNumbers[origin]);
+            ForwardLocalPublication(origin, sequenceNumber);
         }
 
         public void AddSiblingBroker(string siblingUrl)

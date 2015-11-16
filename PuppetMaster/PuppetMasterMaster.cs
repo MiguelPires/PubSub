@@ -50,30 +50,6 @@ namespace PuppetMaster
                     }
                 }
             }
-
-
-            /*foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
-            {
-               // Console.Out.WriteLine("entry key : " + entry.Key);
-
-                Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
-
-                Thread thready = new Thread(() => entry.Value.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString()));
-
-                Thread threadz = new Thread(() => entry.Value.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString()));
-
-                threadx.Start();
-                thready.Start();
-                threadz.Start();
-
-
-            }
-            foreach (IPuppetMasterSlave slave in Slaves.Values)
-            {
-                Thread threadx = new Thread(() => slave.DeliverSettingsToLocalProcesses( this.OrderingGuarantee.ToString(), this.RoutingPolicy.ToString(), this.LoggingLevel.ToString()));
-                threadx.Start();
-            }*/
-
         }
 
 
@@ -105,7 +81,6 @@ namespace PuppetMaster
                 {
                     Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
                     thread.Start();
-                    //slave.DeliverCommand(puppetArgs);
                 }
 
                 // deliver command to every local process
@@ -113,7 +88,6 @@ namespace PuppetMaster
                 {
                     Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
                     thread.Start();
-                    //proc.DeliverCommand(new[] { puppetArgs[1] });
                 }
             }
             else
@@ -126,7 +100,7 @@ namespace PuppetMaster
                 }
                 catch (KeyNotFoundException)
                 {
-                    Console.Out.WriteLine("The process " + processName + " couldn't be found.");
+                    Console.Out.WriteLine("WARNING: The process " + processName + " couldn't be found.");
                     return;
                 }
 
@@ -237,7 +211,7 @@ namespace PuppetMaster
                 // the wait command has a different purpose, but should also be parsed
 
                 default:
-                    throw new CommandParsingException("Unknown command: " + command);
+                    throw new CommandParsingException("WARNING: Unknown command: " + command);
             }
         }
 
@@ -306,7 +280,7 @@ namespace PuppetMaster
             }
             catch (KeyNotFoundException)
             {
-                Console.WriteLine("Config wasn't delivered to the site '" + siteName + "'");
+                Console.WriteLine("WARNING: Config wasn't delivered to the site '" + siteName + "'");
             }
 
 
@@ -340,6 +314,10 @@ namespace PuppetMaster
                 case "TOTAL":
                     this.OrderingGuarantee = OrderingGuarantee.Total;
                     break;
+
+                default:
+                    Console.Out.WriteLine("WARNING: "+tokens[1] + " isn't a valid ordering garantee.");
+                    break;
             }
           
         }
@@ -352,8 +330,12 @@ namespace PuppetMaster
                     this.RoutingPolicy = RoutingPolicy.Flood;
                     break;
 
-                case "filtering":
+                case "filter":
                     this.RoutingPolicy = RoutingPolicy.Filter;
+                    break;
+
+                default:
+                    Console.Out.WriteLine("WARNING: "+tokens[1] + " isn't a valid routing policy.");
                     break;
             }
         }
@@ -368,6 +350,10 @@ namespace PuppetMaster
 
                 case "light":
                     this.LoggingLevel = LoggingLevel.Light;
+                    break;
+
+                default:
+                    Console.Out.WriteLine("WARNING: "+tokens[1]+" isn't a valid logging level.");
                     break;
             }
             
@@ -386,41 +372,34 @@ namespace PuppetMaster
             try
             {
                 Console.WriteLine("Connecting to " + siteUrl);
-
                              
                 UtilityFunctions.ConnectFunction<IPuppetMasterSlave> fun = (string urlToConnect) =>
                     {
-                        IPuppetMasterSlave pmslave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), urlToConnect);
-                        pmslave.Ping();
-                        pmslave.RegisterWithMaster(siteParent, SiteName);
-                        pmslave.DeliverSetting("RoutingPolicy",
-                            RoutingPolicy == RoutingPolicy.Filter ? "filtering" : "flooding");
-                        pmslave.DeliverSetting("LoggingLevel", LoggingLevel == LoggingLevel.Full ? "full" : "light");
+                        IPuppetMasterSlave puppetMasterSlave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), urlToConnect);
+                        puppetMasterSlave.Ping();
+                        puppetMasterSlave.RegisterWithMaster(siteParent, SiteName);
+                        puppetMasterSlave.DeliverSetting("RoutingPolicy",
+                            RoutingPolicy == RoutingPolicy.Filter ? "filter" : "flooding");
+                        puppetMasterSlave.DeliverSetting("LoggingLevel", LoggingLevel == LoggingLevel.Full ? "full" : "light");
+
                         switch (OrderingGuarantee)
                         {
                             case OrderingGuarantee.Fifo:
-                                pmslave.DeliverSetting("OrderingGuarantee", "FIFO");
+                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "FIFO");
                                 break;
                             case OrderingGuarantee.No:
-                                pmslave.DeliverSetting("OrderingGuarantee", "NO");
+                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "NO");
                                 break;
                             case OrderingGuarantee.Total:
-                                pmslave.DeliverSetting("OrderingGuarantee", "TOTAL");
+                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "TOTAL");
                                 break;
                         }
-                        return pmslave;
+                        return puppetMasterSlave;
                     };
 
                 var slave = UtilityFunctions.TryConnection<IPuppetMasterSlave>(fun, 500, 5, siteUrl);
                 Slaves.Add(name,slave);
-                
 
-                /*IPuppetMasterSlave slave =
-                    (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), siteUrl);
-                slave.Ping();
-                slave.RegisterWithMaster(siteParent, SiteName);
-
-                Slaves.Add(name, slave);*/
                 return slave;
             }
             catch (SocketException)

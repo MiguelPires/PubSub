@@ -74,7 +74,7 @@ namespace CommonTypes
                 switch (command[0])
                 {
                     case "Status":
-                        Console.Out.WriteLine("\t" + "**** Status *****");
+                        Console.Out.WriteLine("**** Status ********\t\n");
                         break;
 
                     case "Crash":
@@ -172,21 +172,9 @@ namespace CommonTypes
                 return brokerUrls;
             };
 
-            //var fun = new UtilityFunctions.ConnectFunction<List<string>>(GetBrokersFunc);
             List<string> brokersUrlsResult = UtilityFunctions.TryConnection<List<string>>(fun, 0, 5, puppetMasterUrl);
             return brokersUrlsResult;
         }
-       /* protected List<string> GetBrokersFunc(string puppetMasterUrl)
-        {
-            List<string> brokerUrls = null;
-
-            // connects to the specified site's puppetMaster
-            IPuppetMasterSlave puppetMasterSlave =
-                (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), puppetMasterUrl);
-            brokerUrls = puppetMasterSlave.GetBrokers();
-
-            return brokerUrls;
-        }*/
         
         private void ConnectToPuppetMaster(string puppetMasterUrl)
         {

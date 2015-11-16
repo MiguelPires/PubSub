@@ -33,16 +33,6 @@ namespace Publisher
 
                 var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 0, 5, brokerUrl);
                 Brokers.Add(parBroker);
-                /*try
-                {
-                    IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), brokerUrl);
-                    parentBroker.RegisterPubSub(ProcessName, Url);
-                    Brokers.Add(parentBroker);
-                }
-                catch (SocketException)
-                {
-                    Console.Out.WriteLine(processName+" couldn't connect to "+brokerUrl);
-                }*/
             }
         }
 
@@ -63,7 +53,7 @@ namespace Publisher
                 case "Status":
                     base.DeliverCommand(command);
                     Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
-                    Console.Out.WriteLine("\t" + "*******************");
+                    Console.Out.WriteLine("*******************\t\n");
                     break;
                 case "Crash":
                 case "Freeze":

@@ -50,8 +50,8 @@ namespace Subscriber
                 // generic commands
                 case "Status":
                     base.DeliverCommand(command);
-                    Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
-                    Console.Out.WriteLine("\t" + "*******************");
+                    Console.Out.WriteLine("\t" + "Sequence Number: "+ OutSequenceNumber);
+                    Console.Out.WriteLine("*******************\t\n");
                     break;
                 case "Crash":
                 case "Freeze":

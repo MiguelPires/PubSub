@@ -131,9 +131,11 @@ namespace Broker
                 {
                     IBroker childBroker = childBrokers[childIndex];
                     Thread thread =
-                        new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName, sequenceNumber));//estava ProcessName antes no origin
+                        new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName, sequenceNumber));
                     thread.Start();
-                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                    if (LoggingLevel == LoggingLevel.Full)
+                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
 
@@ -147,14 +149,13 @@ namespace Broker
                 Thread thread =
                     new Thread(() => parent.DeliverSubscription(origin, topic, siteName, sequenceNumber));
                 thread.Start();
-                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                if (LoggingLevel == LoggingLevel.Full)
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
             }
 
             MessageProcessed(origin, sequenceNumber);
-
-            
         }
-
 
         public void DeliverUnsubscription(string origin, string topic, string siteName, int sequenceNumber)
         {
@@ -189,7 +190,9 @@ namespace Broker
                     Thread thread =
                         new Thread(() => childBroker.DeliverUnsubscription(ProcessName, topic, SiteName, sequenceNumber));
                     thread.Start();
-                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                    if (LoggingLevel == LoggingLevel.Full)
+                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
 
@@ -203,7 +206,9 @@ namespace Broker
                 Thread thread =
                     new Thread(() => parent.DeliverUnsubscription(origin, topic, siteName, sequenceNumber));
                 thread.Start();
-                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                if (LoggingLevel == LoggingLevel.Full)
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
             }
 
             MessageProcessed(origin, sequenceNumber);
@@ -218,12 +223,11 @@ namespace Broker
         /// <param name="sequenceNumber"></param>
         public void DeliverPublication(string origin, string topic, string publication, string fromSite, int sequenceNumber)
         {
-            Console.Out.WriteLine("********DeliverPublication********");
+            Console.Out.WriteLine("******** DeliverPublication ********");
             if (!PublicationReceived(origin, topic, publication, fromSite, sequenceNumber))
             {
                 return;
             }
-
 
             Console.Out.WriteLine("Receiving publication on topic " + topic + " from  " + origin);
             SubscriptionSet subs;
@@ -262,7 +266,9 @@ namespace Broker
                                 () =>
                                     childBroker.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
                         thread.Start();
-                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                        if (LoggingLevel == LoggingLevel.Full)
+                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
                 }
 
@@ -278,7 +284,9 @@ namespace Broker
                             () =>
                                 parent.DeliverPublication(origin, topic, publication, this.SiteName, sequenceNumber));
                     thread.Start();
-                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
+
+                    if (LoggingLevel == LoggingLevel.Full)
+                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
             else if (RoutingTable.TryGetValue(topic, out subs))
@@ -298,6 +306,7 @@ namespace Broker
                         Console.Out.WriteLine("Sending publication to " + match.Key);
 
                         ISubscriber subscriber = (ISubscriber)proc;
+
                         Thread thread =
                             new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
                         thread.Start();
@@ -321,7 +330,8 @@ namespace Broker
                         Thread thread =
                             new Thread(() => broker.DeliverPublication(origin, topic, publication, SiteName, sequenceNumber));
                         thread.Start();
-                        if(LoggingLevel==LoggingLevel.Full)
+
+                        if(LoggingLevel == LoggingLevel.Full)
                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
 
@@ -335,11 +345,13 @@ namespace Broker
                         Thread thread =
                             new Thread(() => parent.DeliverPublication(origin, topic, publication, SiteName, sequenceNumber));
                         thread.Start();
+
                         if (LoggingLevel == LoggingLevel.Full)
                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
                 }
             }
+
             MessageProcessed(origin, sequenceNumber);
             ForwardLocalPublication(origin, sequenceNumber);
         }
@@ -388,14 +400,17 @@ namespace Broker
 
         void PrintStatus()
         {
-            Console.Out.WriteLine("\t" + "**** Status *****");
+            Console.Out.WriteLine("**** Status *****");
+            if (RoutingTable.Keys.Count == 0)
+                Console.Out.WriteLine("\t\n\tThere are no subscriptions");
+
             foreach (var entry in RoutingTable)
             {
                 SubscriptionSet set = entry.Value;
                 foreach (var process in set.Processes)
-                    Console.Out.WriteLine("\t" + process.Key + " is subscribed to " + entry.Key);
+                    Console.Out.WriteLine("\t\n\t" + process.Key + " is subscribed to " + entry.Key);
             }
-            Console.Out.WriteLine("\t" + "*******************");
+            Console.Out.WriteLine("*******************\t\n");
         }
 
         /// <summary>
@@ -449,7 +464,6 @@ namespace Broker
 
         public void UpdatePublisherSequenceNumber(string process, int sequenceNumber)
         {
-            //Console.Out.WriteLine("process:{0} sqNumber:{1}", process, sequenceNumber);
             InSequenceNumbers[process] = sequenceNumber;
         }
 
@@ -478,7 +492,6 @@ namespace Broker
             }
         }
 
-
         /// <summary>
         /// This method updates the sequenceNumber on the given process name for all replicas
         /// </summary>
@@ -493,6 +506,7 @@ namespace Broker
                 thread.Start();
             }
         }
+
         private void MessageProcessed(string origin, int sequenceNumber)
         {
             if (this.OrderingGuarantee != OrderingGuarantee.Fifo)

@@ -51,7 +51,7 @@ namespace PuppetMaster
                 case "RoutingPolicy":
                     if (settingValue.Equals("flooding"))
                         this.RoutingPolicy = RoutingPolicy.Flood;
-                    else if (settingValue.Equals("filtering"))
+                    else if (settingValue.Equals("filter"))
                         this.RoutingPolicy = RoutingPolicy.Filter;
                     else
                     {
@@ -106,6 +106,7 @@ namespace PuppetMaster
                 threadz.Join();
             }
         }
+
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
 

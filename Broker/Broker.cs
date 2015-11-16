@@ -230,25 +230,37 @@ namespace Broker
             }
 
             Console.Out.WriteLine("Receiving publication on topic " + topic + " from  " + origin);
-            SubscriptionSet subs;
+
+            SubscriptionSet subs = null;
+            IDictionary<string, string> matchList = null;
+            if (RoutingTable.TryGetValue(topic, out subs))
+            {
+                matchList = subs.GetMatchList();
+            }
+
+            // If there are any subscriptions
+            if (matchList != null)
+            {
+                // send to the interested local processes
+                foreach (KeyValuePair<string, string> match in matchList)
+                {
+                    IProcess proc;
+                    if (LocalProcesses.TryGetValue(match.Key, out proc))
+                    {
+                        Console.Out.WriteLine("Sending publication to " + match.Key);
+
+                        ISubscriber subscriber = (ISubscriber)proc;
+
+                        Thread thread =
+                            new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
+                        thread.Start();
+                        PuppetMaster.DeliverLog("SubEvent " + match.Key + ", " + origin + ", " + topic);
+                    }
+                }
+            }
+
             if (this.RoutingPolicy == RoutingPolicy.Flood)
             {
-                foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
-                {
-                    try
-                    {
-                        ISubscriber sub = (ISubscriber)entry.Value;
-                        sub.DeliverPublication(publication, sequenceNumber);
-                        //log:
-                        PuppetMaster.DeliverLog("SubEvent " + entry.Key+ ", " + origin + ", " + topic);
-
-                    }
-                    catch (Exception)
-                    {
-                        continue;
-                    }
-                    // Console.Out.WriteLine("entry key : " + entry.Key);
-                }
                 Random rand = new Random();
 
                 foreach (KeyValuePair<string, List<IBroker>> child in Children)
@@ -256,7 +268,7 @@ namespace Broker
                     // picks a random broker for load-balancing purposes
                     List<IBroker> childBrokers = child.Value;
                     int childIndex = rand.Next(0, childBrokers.Count);
-                    //Console.Out.WriteLine("childIndex:" + childIndex + " childbrokers.count:" + childBrokers.Count);
+
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(fromSite))
                     {
@@ -289,9 +301,9 @@ namespace Broker
                         PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                 }
             }
-            else if (RoutingTable.TryGetValue(topic, out subs))
+            else if (matchList != null)
             {
-                IDictionary<string, string> matchList = subs.GetMatchList();
+                // if there are subscriptions to the topic, send to the appropriate sites
                 List<string> SentSites = new List<string>();
 
                 foreach (KeyValuePair<string, string> match in matchList)
@@ -299,19 +311,6 @@ namespace Broker
                     // we don't want to sent multiple messages to the same site
                     if (SentSites.Contains(match.Value))
                         continue;
-
-                    IProcess proc;
-                    if (LocalProcesses.TryGetValue(match.Key, out proc))
-                    {
-                        Console.Out.WriteLine("Sending publication to " + match.Key);
-
-                        ISubscriber subscriber = (ISubscriber)proc;
-
-                        Thread thread =
-                            new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
-                        thread.Start();
-                        PuppetMaster.DeliverLog("SubEvent " + match.Key + ", " + origin + ", " + topic);
-                    }
 
                     // don't send publication to where it came from
                     if (match.Value.Equals(fromSite))
@@ -331,7 +330,7 @@ namespace Broker
                             new Thread(() => broker.DeliverPublication(origin, topic, publication, SiteName, sequenceNumber));
                         thread.Start();
 
-                        if(LoggingLevel == LoggingLevel.Full)
+                        if (LoggingLevel == LoggingLevel.Full)
                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + origin + ", " + topic);
                     }
 

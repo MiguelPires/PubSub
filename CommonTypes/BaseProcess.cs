@@ -196,7 +196,6 @@ namespace CommonTypes
             {
                     PuppetMaster = (IPuppetMasterMaster)puppetMaster; 
             }
-
         }
 
         public override object InitializeLifetimeService()

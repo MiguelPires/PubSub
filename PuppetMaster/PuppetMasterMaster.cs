@@ -79,15 +79,17 @@ namespace PuppetMaster
                 // deliver command to every remote PuppetMaster
                 foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
-                    Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
-                    thread.Start();
+                    slave.DeliverCommand(puppetArgs);
+                    /*Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
+                    thread.Start();*/
                 }
 
                 // deliver command to every local process
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
-                    Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
-                    thread.Start();
+                    proc.DeliverCommand(new[] {puppetArgs[1]});
+                    /* Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
+                    thread.Start();*/
                 }
             }
             else
@@ -111,17 +113,17 @@ namespace PuppetMaster
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
                     IProcess process = LocalProcesses[processName];
 
-                    Thread thread = new Thread(() => process.DeliverCommand(processArgs));
-                    thread.Start();
-                   // process.DeliverCommand(processArgs);
+                    /*Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+                    thread.Start();*/
+                    process.DeliverCommand(processArgs);
                 }
                 else
                 {
                     IPuppetMasterSlave puppetMaster = Slaves[site];
 
-                    Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
-                    thread.Start();
-                    //puppetMaster.DeliverCommand(puppetArgs);
+                   /* Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
+                    thread.Start();*/
+                    puppetMaster.DeliverCommand(puppetArgs);
                 }
             }
         }

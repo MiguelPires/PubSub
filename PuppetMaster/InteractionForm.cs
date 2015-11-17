@@ -50,7 +50,6 @@ namespace PuppetMaster
 
             string[] lines = this.GroupBox.Text.Split('\n');
 
-            //TODO: SEND EACH LINE TO THE PUPPETMASTER
             foreach (string line in lines)
 
             {

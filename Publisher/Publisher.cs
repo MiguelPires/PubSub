@@ -25,78 +25,81 @@ namespace Publisher
             {
                 UtilityFunctions.ConnectFunction<IBroker> fun = (string urlToConnect) =>
                 {
-                    IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), urlToConnect);
-                    parentBroker.RegisterPubSub(ProcessName, Url);
+                    IBroker broker = (IBroker)Activator.GetObject(typeof(IBroker), urlToConnect);
+                    broker.RegisterPubSub(ProcessName, Url);
 
-                    return parentBroker;
+                    return broker;
                 };
 
-                var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 0, 5, brokerUrl);
-                Brokers.Add(parBroker);
+                var brokerObject = UtilityFunctions.TryConnection<IBroker>(fun, 500, 5, brokerUrl);
+                Brokers.Add(brokerObject);
             }
         }
 
         public override void DeliverCommand(string[] command)
         {
-            if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
+            lock(this)
             {
-                base.DeliverCommand(command);
-                return;
-            }
-
-            string complete = string.Join(" ", command);
-            Console.Out.WriteLine("Received command: " + complete);
-
-            switch (command[0])
-            {
-                // generic commands
-                case "Status":
+                if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
+                {
                     base.DeliverCommand(command);
-                    Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
-                    Console.Out.WriteLine("*******************\t\n");
-                    break;
-                case "Crash":
-                case "Freeze":
-                    base.DeliverCommand(command);
-                    break;
+                    return;
+                }
 
-                case "Unfreeze":
-                    Console.Out.WriteLine("Unfreezing");
-                    Status = Status.Unfrozen;
-                    ProcessFrozenListCommands();
-                    break;
+                string complete = string.Join(" ", command);
+                Console.Out.WriteLine("Received command: " + complete);
 
-                case "Publish":
-                    int numberOfEvents = 0;
+                switch (command[0])
+                {
+                    // generic commands
+                    case "Status":
+                        base.DeliverCommand(command);
+                        Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
+                        Console.Out.WriteLine("*******************\t\n");
+                        break;
+                    case "Crash":
+                    case "Freeze":
+                        base.DeliverCommand(command);
+                        break;
 
-                    if (!(int.TryParse(command[1], out numberOfEvents)))
-                    {
-                        Console.Out.WriteLine("Publisher " + ProcessName + ": invalid number of events");
-                        return;
-                    }
+                    case "Unfreeze":
+                        Console.Out.WriteLine("Unfreezing");
+                        Status = Status.Unfrozen;
+                        ProcessFrozenListCommands();
+                        break;
 
-                    string topic = command[2];
-                    int timeInterval = 0;
+                    case "Publish":
+                        int numberOfEvents = 0;
 
-                    if (!(int.TryParse(command[3], out timeInterval)))
-                    {
-                        Console.Out.WriteLine("Publisher " + ProcessName + ": invalid time interval");
-                        return;
-                    }
+                        if (!(int.TryParse(command[1], out numberOfEvents)))
+                        {
+                            Console.Out.WriteLine("Publisher " + ProcessName + ": invalid number of events");
+                            return;
+                        }
 
-                    for (int i = 0; i < numberOfEvents; i++)
-                    {
-                        string content = ProcessName + i;
-                        Console.Out.WriteLine("Publishing '"+content+"' on topic "+topic);
-                        SendPublication(topic, content);
-                        Thread.Sleep(timeInterval);
-                    }
-                    break;
+                        string topic = command[2];
+                        int timeInterval = 0;
 
-                default:
-                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
-                    break;
-                // subscriber specific commands
+                        if (!(int.TryParse(command[3], out timeInterval)))
+                        {
+                            Console.Out.WriteLine("Publisher " + ProcessName + ": invalid time interval");
+                            return;
+                        }
+
+                        for (int i = 0; i < numberOfEvents; i++)
+                        {
+                            string content = ProcessName +"-"+ topic+"-"+i;
+                            Console.Out.WriteLine("Publishing '" + content + "' on topic " + topic);
+                            SendPublication(topic, content);
+                            Thread.Sleep(timeInterval);
+                        }
+                        break;
+
+                    default:
+                        Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                        break;
+                        // subscriber specific commands
+                }
             }
         }
 
@@ -108,10 +111,14 @@ namespace Publisher
 
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
                 ++OutSequenceNumber;
-            PuppetMaster.DeliverLog("PubEvent "+ ProcessName+", "+ topic);
             Thread thread =
+              new Thread(() => PuppetMaster.DeliverLog("PubEvent " + ProcessName + ", " + topic));
+            thread.Start();
+
+            thread =
                           new Thread(() => broker.DeliverPublication(ProcessName, topic, publication, SiteName, OutSequenceNumber));
             thread.Start();
+            thread.Join();
         }
 
         public void ProcessFrozenListCommands()

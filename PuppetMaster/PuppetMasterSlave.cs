@@ -90,26 +90,8 @@ namespace PuppetMaster
             Console.Out.WriteLine(settingType+": "  + settingValue);
         }
 
-        void IPuppetMasterSlave.DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee)
-        {
-            foreach (KeyValuePair<string, IProcess> entry in LocalProcesses)
-            {
-                //Console.Out.WriteLine("entry key : " + entry.Key);
-                Thread threadx = new Thread(() => entry.Value.DeliverSetting("OrderingGuarantee", this.OrderingGuarantee.ToString()));
-                threadx.Start();
-                threadx.Join();
-                Thread thready = new Thread(() => entry.Value.DeliverSetting("RoutingPolicy", this.RoutingPolicy.ToString()));
-                thready.Start();
-                thready.Join();
-                Thread threadz = new Thread(() => entry.Value.DeliverSetting("LoggingLevel", this.LoggingLevel.ToString()));
-                threadz.Start();
-                threadz.Join();
-            }
-        }
-
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
-
             string processName = commandArgs[0];
             if (processName.Equals("all"))
             {
@@ -147,7 +129,7 @@ namespace PuppetMaster
         void IPuppetMasterSlave.RegisterWithMaster(string siteParent, string masterSite)
         {
             ParentSite = siteParent;
-            string url = "tcp://localhost:" + UtilityFunctions.GetPort(siteParent) + "/" + masterSite;
+            string url = "tcp://localhost:" + UtilityFunctions.GetPort(masterSite) + "/" + masterSite;
             Master = (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), url);
         }
 

@@ -43,7 +43,7 @@ namespace CommonTypes
         void DeliverCommand(string[] commandArgs);
         void SendLog(string log);
         void RegisterWithMaster(string siteParent, string masterName);
-        void DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee);
+       // void DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee);
     }
 
     /// <summary>

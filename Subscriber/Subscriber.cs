@@ -24,64 +24,70 @@ namespace Subscriber
             {
                 UtilityFunctions.ConnectFunction<IBroker> fun = (string url) =>
                     {
-                        IBroker parentBroker = (IBroker)Activator.GetObject(typeof(IBroker), url);
-                        parentBroker.RegisterPubSub(ProcessName, Url);
+                        IBroker broker = (IBroker)Activator.GetObject(typeof(IBroker), url);
+                        broker.RegisterPubSub(ProcessName, Url);
 
-                        return parentBroker;
+                        return broker;
                     };
 
-                var parBroker = UtilityFunctions.TryConnection<IBroker>(fun, 500, 5, brokerUrl);
-                Brokers.Add(parBroker);
+                IBroker brokerObject = UtilityFunctions.TryConnection<IBroker>(fun, 500, 5, brokerUrl);
+                Brokers.Add(brokerObject);
             }
         }
 
         public override void DeliverCommand(string[] command)
         {
-            if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
+            lock (this)
             {
-                base.DeliverCommand(command);
-                return;
-            }
-
-            string complete = string.Join(" ", command);
-            Console.Out.WriteLine("Received command: " + complete);
-            switch (command[0])
-            {
-                // generic commands
-                case "Status":
+                if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
+                {
                     base.DeliverCommand(command);
-                    Console.Out.WriteLine("\t" + "Sequence Number: "+ OutSequenceNumber);
-                    Console.Out.WriteLine("*******************\t\n");
-                    break;
-                case "Crash":
-                case "Freeze":
-                    base.DeliverCommand(command);
-                    break;
+                    return;
+                }
 
-                case "Unfreeze":
-                    Console.Out.WriteLine("Unfreezing");
-                    Status = Status.Unfrozen;
-                    ProcessFrozenListCommands();
-                    break;
+                string complete = string.Join(" ", command);
+                Console.Out.WriteLine("Received command: " + complete);
+                switch (command[0])
+                {
+                    // generic commands
+                    case "Status":
+                        base.DeliverCommand(command);
+                        Console.Out.WriteLine("\t" + "Sequence Number: " + OutSequenceNumber);
+                        Console.Out.WriteLine("*******************\t\n");
+                        break;
+                    case "Crash":
+                    case "Freeze":
+                        base.DeliverCommand(command);
+                        break;
 
-                case "Subscribe":
-                    SendSubscription(command[1]);
-                    break;
+                    case "Unfreeze":
+                        Console.Out.WriteLine("Unfreezing");
+                        Status = Status.Unfrozen;
+                        ProcessFrozenListCommands();
+                        break;
 
-                case "Unsubscribe":
-                    SendUnsubscription(command[1]);
-                    break;
+                    case "Subscribe":
+                        SendSubscription(command[1]);
+                        break;
 
-                default:
-                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
-                    break;
+                    case "Unsubscribe":
+                        SendUnsubscription(command[1]);
+                        break;
+
+                    default:
+                        Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                        break;
+                }
             }
         }
 
         void ISubscriber.DeliverPublication(string publication, int sequenceNumber)
         {
-            // TODO: add sequence number checking
+            lock (this)
+            {
+                // TODO: add sequence number checking
                 Console.Out.WriteLine("Received publication '" + publication + "'");
+            }
         }
 
         public void ProcessFrozenListCommands()
@@ -109,6 +115,7 @@ namespace Subscriber
             Thread thread =
                 new Thread(() => Brokers[brokerIndex].DeliverSubscription(ProcessName, topic, SiteName, OutSequenceNumber));
             thread.Start();
+            thread.Join();
         }
 
         private void SendUnsubscription(string topic)
@@ -123,7 +130,9 @@ namespace Subscriber
             Thread thread =
                 new Thread(() => Brokers[brokerIndex].DeliverUnsubscription(ProcessName, topic, SiteName, OutSequenceNumber));
             thread.Start();
+            thread.Join();
         }
+
         public override string ToString()
         {
             return "Subscriber";

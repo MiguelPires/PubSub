@@ -32,6 +32,7 @@ namespace CommonTypes
         public RoutingPolicy RoutingPolicy;
         //Number of Retries to connect
         public const int NumberOfRetries = 5;
+
         protected BaseProcess(string processName, string processUrl, string puppetMasterUrl, string siteName)
         {
             ProcessName = processName;

@@ -51,6 +51,7 @@ namespace Subscriber
             prop["name"] = serviceName;
 
             TcpChannel channel = new TcpChannel(prop, null, serverProv);
+
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(ISubscriber));
 

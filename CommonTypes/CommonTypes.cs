@@ -79,22 +79,14 @@ namespace CommonTypes
     }
 
     /// <summary>
-    ///     The interface for the PuppetMaster for the PuppetMaster - Process communication
-    /// </summary>
-    /*public interface IProcessMaster
-    {
-        void DeliverLogToPuppetMaster(string log);
-    }*/
-
-    /// <summary>
     ///     The interface for the Brokers
     /// </summary>
     public interface IBroker : IProcess, IReplica
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
-        void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber);
-        void DeliverUnsubscription(string origin, string topic, string siteName, int sequenceNumber);
+        void DeliverSubscription(string origin, string topic, string siteName);
+        void DeliverUnsubscription(string origin, string topic, string siteName);
         void DeliverPublication(string origin, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
@@ -104,8 +96,8 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void AddLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
-        void RemoveLocalSubscription(string process, string topic, string siteName, int sequenceNumber);
+        void AddLocalSubscription(string process, string topic, string siteName);
+        void RemoveLocalSubscription(string process, string topic, string siteName);
         void UpdatePublisherSequenceNumber(string process, int sequenceNumber);
         /* void AddRemoteSubscription(string topic, string process);
          void RemoveRemoteSubscription(string topic, string process);*/
@@ -118,7 +110,7 @@ namespace CommonTypes
 
     public interface ISubscriber : IProcess
     {
-        void DeliverPublication(string publication, int sequenceNumber);
+        void DeliverPublication(string publication, string topic, string process, int sequenceNumber);
     }
 
     /// <summary>

@@ -17,16 +17,22 @@ namespace Broker
             this.commands[sequenceNumber] = command;
         }
 
-        public string[] GetCommand(int sequenceNumber)
+        public string[] GetCommandAndRemove(int sequenceNumber)
         {
             string[] command;
 
             if (this.commands.TryGetValue(sequenceNumber, out command))
-            {
+            { 
+                commands.Remove(sequenceNumber);
                 return command;
             }
 
             return null;
+        }
+
+        public ICollection<int> GetSequenceNumbers()
+        {
+            return commands.Keys;
         }
 
     }

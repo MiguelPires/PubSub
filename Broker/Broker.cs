@@ -96,13 +96,10 @@ namespace Broker
             LocalProcesses[procName] = (IProcess)Activator.GetObject(typeof(IProcess), procUrl);
         }
 
-        public void DeliverSubscription(string origin, string topic, string siteName, int sequenceNumber)
+        public void DeliverSubscription(string origin, string topic, string siteName)
         {
             lock(this)
             {
-                if (!SubscriptionReceived(topic, origin, siteName, sequenceNumber))
-                    return;
-
                 Console.Out.WriteLine("Receiving subscription on topic " + topic + " from  " + origin);
 
                 // get or create the subscription for this topic
@@ -115,7 +112,7 @@ namespace Broker
                 subscriptionSet.AddSubscriber(origin, siteName);
                 RoutingTable[topic] = subscriptionSet;
 
-                ForwardLocalSubscription(origin, topic, siteName, sequenceNumber);
+                ForwardLocalSubscription(origin, topic, siteName);
 
                 Random rand = new Random();
                 foreach (KeyValuePair<string, List<IBroker>> child in Children)
@@ -128,9 +125,11 @@ namespace Broker
                     if (!child.Key.Equals(siteName))
                     {
                         IBroker childBroker = childBrokers[childIndex];
+
                         Thread thread =
-                            new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName, sequenceNumber));
+                            new Thread(() => childBroker.DeliverSubscription(origin, topic, SiteName));
                         thread.Start();
+                        thread.Join();
 
                         if (LoggingLevel == LoggingLevel.Full)
                         {
@@ -149,7 +148,7 @@ namespace Broker
                     IBroker parent = ParentBrokers[parentIndex];
 
                     Thread thread =
-                        new Thread(() => parent.DeliverSubscription(origin, topic, siteName, sequenceNumber));
+                        new Thread(() => parent.DeliverSubscription(origin, topic, SiteName));
                     thread.Start();
 
                     if (LoggingLevel == LoggingLevel.Full)
@@ -159,18 +158,13 @@ namespace Broker
                         thread.Start();
                     }
                 }
-
-                MessageProcessed(origin, sequenceNumber);
             }
         }
 
-        public void DeliverUnsubscription(string origin, string topic, string siteName, int sequenceNumber)
+        public void DeliverUnsubscription(string origin, string topic, string siteName)
         {
             lock (this)
             {
-                if (!UnsubscriptionReceived(topic, origin, siteName, sequenceNumber))
-                    return;
-
                 Console.Out.WriteLine("Receiving unsubscription on topic " + topic + " from  " + origin);
 
                 // get or create the subscription for this topic
@@ -183,7 +177,7 @@ namespace Broker
                 subscriptionSet.RemoveSubscriber(origin);
                 RoutingTable[topic] = subscriptionSet;
 
-                ForwardLocalUnsubscription(origin, topic, siteName, sequenceNumber);
+                ForwardLocalUnsubscription(origin, topic, siteName);
 
                 Random rand = new Random();
                 foreach (KeyValuePair<string, List<IBroker>> child in Children)
@@ -197,7 +191,7 @@ namespace Broker
                     {
                         IBroker childBroker = childBrokers[childIndex];
                         Thread thread =
-                            new Thread(() => childBroker.DeliverUnsubscription(ProcessName, topic, SiteName, sequenceNumber));
+                            new Thread(() => childBroker.DeliverUnsubscription(origin, topic, SiteName));
                         thread.Start();
 
                         if (LoggingLevel == LoggingLevel.Full)
@@ -216,7 +210,7 @@ namespace Broker
                     IBroker parent = ParentBrokers[parentIndex];
 
                     Thread thread =
-                        new Thread(() => parent.DeliverUnsubscription(origin, topic, siteName, sequenceNumber));
+                        new Thread(() => parent.DeliverUnsubscription(origin, topic, SiteName));
                     thread.Start();
 
                     if (LoggingLevel == LoggingLevel.Full)
@@ -225,8 +219,6 @@ namespace Broker
                         thread.Start();
                     }
                 }
-
-                MessageProcessed(origin, sequenceNumber);
             }
         }
         /// <summary>
@@ -241,10 +233,10 @@ namespace Broker
         {
             lock(this)
             {
-                if (!PublicationReceived(origin, topic, publication, fromSite, sequenceNumber))
+            /*    if (!PublicationReceived(origin, topic, publication, fromSite, sequenceNumber))
                 {
                     return;
-                }
+                }*/
 
                 Console.Out.WriteLine("Receiving publication on topic " + topic + " from  " + origin);
 
@@ -264,12 +256,12 @@ namespace Broker
                         IProcess proc;
                         if (LocalProcesses.TryGetValue(match.Key, out proc))
                         {
-                            Console.Out.WriteLine("Sending publication to " + match.Key);
+                            Console.Out.WriteLine("Sending publication '"+publication+"' to " + match.Key);
 
                             ISubscriber subscriber = (ISubscriber)proc;
 
                             Thread thread =
-                                new Thread(() => subscriber.DeliverPublication(publication, sequenceNumber));
+                                new Thread(() => subscriber.DeliverPublication(publication, topic, origin, sequenceNumber));
                             thread.Start();
 
                             thread = new Thread(() => PuppetMaster.DeliverLog("SubEvent " + match.Key + ", " + origin + ", " + topic));
@@ -385,7 +377,7 @@ namespace Broker
                     }
                 }
 
-                MessageProcessed(origin, sequenceNumber);
+            //    MessageProcessed(origin, sequenceNumber);
                 ForwardLocalPublication(origin, sequenceNumber);
             }
         }
@@ -460,14 +452,11 @@ namespace Broker
         /// <param name="topic"></param>
         /// <param name="siteName"></param>
         /// <param name="sequenceNumber"></param>
-        public void AddLocalSubscription(string process, string topic, string siteName, int sequenceNumber)
+        public void AddLocalSubscription(string process, string topic, string siteName)
         {
             lock (this)
             {
                 Console.Out.WriteLine("Receiving replicated subscription on topic " + topic + " from " + process);
-
-                if (!SubscriptionReceived(topic, process, siteName, sequenceNumber))
-                    return;
 
                 // get or create the SubscriptionSet for this topic
                 SubscriptionSet subscriptionSet;
@@ -488,14 +477,11 @@ namespace Broker
         /// <param name="topic"></param>
         /// <param name="siteName"></param>
         /// <param name="sequenceNumber"></param>
-        public void RemoveLocalSubscription(string process, string topic, string siteName, int sequenceNumber)
+        public void RemoveLocalSubscription(string process, string topic, string siteName)
         {
             lock (this)
             {
                 Console.Out.WriteLine("Receiving replicated unsubscription on topic " + topic + " from " + process);
-
-                if (!UnsubscriptionReceived(topic, process, siteName, sequenceNumber))
-                    return;
 
                 // get or create the SubscriptionSet for this topic
                 SubscriptionSet subscriptionSet;
@@ -517,24 +503,24 @@ namespace Broker
         /// <summary>
         ///     This method sends the local subscription to the other brokers
         /// </summary>
-        private void ForwardLocalSubscription(string processName, string topic, string siteName, int sequenceNumber)
+        private void ForwardLocalSubscription(string processName, string topic, string siteName)
         {
             foreach (IBroker replica in SiblingBrokers)
             {
                 Thread thread =
-                    new Thread(() => replica.AddLocalSubscription(processName, topic, siteName, sequenceNumber));
+                    new Thread(() => replica.AddLocalSubscription(processName, topic, siteName));
                 thread.Start();
             }
         }
         /// <summary>
         ///     This method sends the local unsubscription to the other brokers
         /// </summary>
-        private void ForwardLocalUnsubscription(string processName, string topic, string siteName, int sequenceNumber)
+        private void ForwardLocalUnsubscription(string processName, string topic, string siteName)
         {
             foreach (IBroker replica in SiblingBrokers)
             {
                 Thread thread =
-                    new Thread(() => replica.RemoveLocalSubscription(processName, topic, siteName, sequenceNumber));
+                    new Thread(() => replica.RemoveLocalSubscription(processName, topic, siteName));
                 thread.Start();
             }
         }
@@ -563,7 +549,7 @@ namespace Broker
             CommandQueue queue;
             if (HoldbackQueue.TryGetValue(origin, out queue))
             {
-                string[] command = queue.GetCommand(sequenceNumber + 1);
+                string[] command = queue.GetCommandAndRemove(sequenceNumber + 1);
                 if (command == null)
                 {
                     return;
@@ -593,104 +579,12 @@ namespace Broker
                     DeliverPublication(command[1], command[2], command[3], command[4], int.Parse(command[5]));
                     break;
 
-                case "DeliverSubscription":
-                    DeliverSubscription(command[1], command[2], command[3], int.Parse(command[4]));
-                    break;
-                case "DeliverUnsubscription":
-                    DeliverUnsubscription(command[1], command[2], command[3], int.Parse(command[4]));
-                    break;
                 default:
                     Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
                     break;
             }
         }
 
-        /// <summary>
-        ///     Decides what to do with the subscription and returns true if it should be further processed or false
-        ///     if it shouldn't
-        /// </summary>
-        /// <param name="topic"></param>
-        /// <param name="origin"></param>
-        /// <param name="siteName"></param>
-        /// <param name="sequenceNumber"></param>
-        /// <returns></returns>
-        private bool SubscriptionReceived(string topic, string origin, string siteName, int sequenceNumber)
-        {
-            string[] eventMessage = new string[5];
-            eventMessage[0] = "DeliverSubscription";
-            eventMessage[1] = origin;
-            eventMessage[2] = topic;
-            eventMessage[3] = siteName;
-            eventMessage[4] = sequenceNumber.ToString();
-
-            if (Status.Equals(Status.Frozen))
-            {
-                FrozenMessages.Add(eventMessage);
-                return false;
-            }
-
-            int lastNumber;
-            if (!InSequenceNumbers.TryGetValue(origin, out lastNumber))
-                lastNumber = 0;
-
-            if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
-            {
-                Console.Out.WriteLine("Delayed message detected. Queueing message: "+sequenceNumber);
-                CommandQueue queue;
-
-                if (HoldbackQueue.TryGetValue(origin, out queue))
-                {
-                    queue.AddCommand(eventMessage, sequenceNumber);
-                }
-                else
-                {
-                    queue = new CommandQueue();
-                    queue.AddCommand(eventMessage, sequenceNumber);
-                    HoldbackQueue[origin] = queue;
-                }
-                return false;
-            }
-            return true;
-        }
-
-        private bool UnsubscriptionReceived(string topic, string origin, string siteName, int sequenceNumber)
-        {
-            string[] eventMessage = new string[5];
-            eventMessage[0] = "DeliverUnsubscription";
-            eventMessage[1] = origin;
-            eventMessage[2] = topic;
-            eventMessage[3] = siteName;
-            eventMessage[4] = sequenceNumber.ToString();
-
-            if (Status.Equals(Status.Frozen))
-            {
-                FrozenMessages.Add(eventMessage);
-                return false;
-            }
-
-            int lastNumber;
-            if (!InSequenceNumbers.TryGetValue(origin, out lastNumber))
-                lastNumber = 0;
-
-            if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
-            {
-                Console.Out.WriteLine("Delayed message detected. Queueing message: "+sequenceNumber);
-                CommandQueue queue;
-
-                if (HoldbackQueue.TryGetValue(origin, out queue))
-                {
-                    queue.AddCommand(eventMessage, sequenceNumber);
-                }
-                else
-                {
-                    queue = new CommandQueue();
-                    queue.AddCommand(eventMessage, sequenceNumber);
-                    HoldbackQueue[origin] = queue;
-                }
-                return false;
-            }
-            return true;
-        }
         /// <summary>
         ///     Decides what to do with the publication. Returns true if it should be further processed
         ///     or false if it shouldn't

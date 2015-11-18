@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Windows.Forms;
 using CommonTypes;
 
@@ -33,7 +34,8 @@ namespace PuppetMaster
         {
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
-            this.master.SendCommand(this.IndividualBox.Text.Trim());
+            Thread thread = new Thread(() => this.master.SendCommand(this.IndividualBox.Text.Trim()));
+            thread.Start();
             this.logBox.Text += this.IndividualBox.Text + "\r\n";
             this.IndividualBox.Clear();
             
@@ -62,7 +64,11 @@ namespace PuppetMaster
                     System.Threading.Thread.Sleep(numVal);
                 }
                 else
-                  this.master.SendCommand(line);
+                {
+                    // proc.DeliverCommand(new[] {puppetArgs[1]});
+                    Thread thread = new Thread(() => this.master.SendCommand(line));
+                    thread.Start();
+                }
                 Console.WriteLine(line);
             }
 

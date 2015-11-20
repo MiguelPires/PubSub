@@ -52,7 +52,7 @@ namespace Broker
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(broker, prop["name"].ToString(), typeof (IBroker));
 
-            Console.WriteLine(@"Running a " + broker + " at " + processUrl + " [Site:"+ siteName+"]");
+            Console.WriteLine(@"Running " + prop["name"] + " at " + processUrl + " - " + siteName);
             Console.ReadLine();
         }
     }

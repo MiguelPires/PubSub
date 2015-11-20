@@ -26,8 +26,9 @@ namespace PuppetMaster
         public OrderingGuarantee OrderingGuarantee = OrderingGuarantee.Fifo;
         // the routing setting
         public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
-        protected delegate void DelegateDeliverMessage(string message);
+        // for ordering the log entries
         protected int eventNumber;
+
         protected BasePuppet(string siteName)
         {
             SiteName = siteName;

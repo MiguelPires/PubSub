@@ -13,6 +13,8 @@ namespace Publisher
         public List<IBroker> Brokers { get; set; }
         // the sequence number used by messages sent to the broker group
         public int OutSequenceNumber { get; private set; }
+        //
+        public int EventNumber { get; private set; }
 
         public Publisher(string processName, string processUrl, string puppetMasterUrl, string siteName)
             : base(processName, processUrl, puppetMasterUrl, siteName)
@@ -20,6 +22,8 @@ namespace Publisher
             Brokers = new List<IBroker>();
             List<string> brokerUrls = GetBrokers(puppetMasterUrl);
             OutSequenceNumber = 0;
+            EventNumber = 0;
+
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
@@ -88,10 +92,11 @@ namespace Publisher
 
                         for (int i = 0; i < numberOfEvents; i++)
                         {
-                            string content = ProcessName +"-"+ topic+"-"+i;
+                            string content = ProcessName +"-"+ topic+"-"+EventNumber;
                             Console.Out.WriteLine("Publishing '" + content + "' on topic " + topic);
                             SendPublication(topic, content);
                             Thread.Sleep(timeInterval);
+                            EventNumber++;
                         }
                         break;
 

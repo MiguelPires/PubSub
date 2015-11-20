@@ -18,6 +18,8 @@ namespace PuppetMaster
         public List<string[]> BrokersStartup { get; }
         // maps a process to it's site name
         public IDictionary<string, string> SiteProcesses;
+        //
+        public Delegate LogDelegate { get; set; }
 
         public PuppetMasterMaster(string siteName) : base(siteName)
         {
@@ -55,8 +57,11 @@ namespace PuppetMaster
 
         void IPuppetMaster.DeliverLog(string message)
         {
-            eventNumber++;
-            Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message + ", " + eventNumber);
+           /* (new Thread(() =>
+            {*/
+                eventNumber++;
+                Form.BeginInvoke(LogDelegate, message + ", " + eventNumber);
+           // })).Start();
         }
 
         void IPuppetMasterMaster.SendCommand(string command)
@@ -80,7 +85,7 @@ namespace PuppetMaster
                 foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
                     slave.DeliverCommand(puppetArgs);
-                    /*Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
+                  /*  Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
                     thread.Start();*/
                 }
 
@@ -88,7 +93,7 @@ namespace PuppetMaster
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
                     proc.DeliverCommand(new[] {puppetArgs[1]});
-                    /* Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
+                  /*   Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
                     thread.Start();*/
                 }
             }
@@ -113,7 +118,7 @@ namespace PuppetMaster
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
                     IProcess process = LocalProcesses[processName];
 
-                    /*Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+               /*     Thread thread = new Thread(() => process.DeliverCommand(processArgs));
                     thread.Start();*/
                     process.DeliverCommand(processArgs);
                 }
@@ -121,7 +126,7 @@ namespace PuppetMaster
                 {
                     IPuppetMasterSlave puppetMaster = Slaves[site];
 
-                   /* Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
+                 /*   Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
                     thread.Start();*/
                     puppetMaster.DeliverCommand(puppetArgs);
                 }

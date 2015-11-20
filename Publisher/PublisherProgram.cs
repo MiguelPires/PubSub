@@ -54,7 +54,7 @@ namespace Publisher
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof(IProcess));
 
-            Console.WriteLine(@"Running a " + publisher+ " at " + processUrl + " [Site:" + site + "]");
+            Console.WriteLine(@"Running " + prop["name"]+ " at " + processUrl + " - " + site );
             Console.ReadLine();
         }
     }

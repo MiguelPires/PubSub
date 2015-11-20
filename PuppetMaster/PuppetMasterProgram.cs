@@ -12,6 +12,8 @@ namespace PuppetMaster
 {
     internal static class PuppetMasterProgram
     {
+        delegate void DelegateDeliverMessage(string message);
+
         /// <summary>
         ///     The main entry point for the application.
         /// </summary>
@@ -48,6 +50,8 @@ namespace PuppetMaster
             Application.SetCompatibleTextRenderingDefault(false);
             LoggingForm form = new LoggingForm();
             puppet.Form = form;
+            puppet.MessageDelegate = new DelegateDeliverMessage(form.DeliverMessage);
+            
             Application.Run(form);
 
             Console.WriteLine(@"Press any key to exit");
@@ -80,6 +84,8 @@ namespace PuppetMaster
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             InteractionForm form = new InteractionForm(master);
+            master.LogDelegate = new DelegateDeliverMessage(form.DeliverMessage);
+
             master.Form = form;
             Application.Run(form);
 

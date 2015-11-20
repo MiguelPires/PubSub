@@ -55,7 +55,7 @@ namespace Subscriber
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(ISubscriber));
 
-            Console.WriteLine(@"Running a " + subscriber + " at " + processUrl + " [Site:" + siteName + "]");
+            Console.WriteLine(@"Running " + prop["name"] + " at " + processUrl + " - " + siteName);
             Console.ReadLine();
         }
     }

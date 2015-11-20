@@ -14,8 +14,12 @@ namespace PuppetMaster
         public LoggingForm Form { get; set; }
         // the PuppetMasterMaster object
         public IPuppetMasterMaster Master { get; private set; }
+        //
+        public Delegate MessageDelegate { get; set; }
+
         public PuppetMasterSlave(string siteName) : base(siteName)
         {
+            //MessageDelegate = new PuppetMasterProgram.DelegateDeliverMessage(Form.DeliverMessage);
             LocalProcesses = new Dictionary<string, IProcess>();
         }
 
@@ -24,9 +28,8 @@ namespace PuppetMaster
             if (!string.IsNullOrEmpty(message))
             {
                 eventNumber++;
-                Form.Invoke(new DelegateDeliverMessage(Form.DeliverMessage), message + ", " + eventNumber);
+                Form.Invoke(MessageDelegate, message + ", " + eventNumber);
                 (new Thread(() => Master.DeliverLog(message))).Start();
-
             }
 
             else
@@ -98,7 +101,8 @@ namespace PuppetMaster
                 foreach (var proc in LocalProcesses.Values)
                 {
                     // the process doesn't need to receive it's own name (first index in commandArgs)
-                    proc.DeliverCommand(new string[1] { commandArgs[1] });
+                    Thread thread = new Thread(() => proc.DeliverCommand(new string[1] { commandArgs[1] }));
+                    thread.Start();
                 }
             }
             else
@@ -111,14 +115,6 @@ namespace PuppetMaster
                 thread.Start();
             }
 
-        }
-
-        void IPuppetMasterSlave.SendLog(string log)
-        {
-            if (!string.IsNullOrEmpty(log))
-                Master.DeliverLog(log);
-            else
-                Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");
         }
 
         /// <summary>

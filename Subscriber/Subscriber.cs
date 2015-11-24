@@ -16,8 +16,7 @@ namespace Subscriber
         // a hold-back queue that stores delayed messages
         public IDictionary<string, MessageQueue> HoldbackQueue { get; } =
             new ConcurrentDictionary<string, MessageQueue>();
-
-        // TODO: remover isto
+        // 
         public IDictionary<string, List<string>> Topics { get; } = new ConcurrentDictionary<string, List<string>>();
 
         public Subscriber(string processName, string processUrl, string puppetMasterUrl, string siteName)
@@ -155,6 +154,10 @@ namespace Subscriber
                         Console.Out.WriteLine("Queueing publication '" + publication + "' with seq " + sequenceNumber);
                         queue.AddCommand(new[] {publication, topic, process}, sequenceNumber);
                         HoldbackQueue[process] = queue;
+                        return false;
+                    } else if (sequenceNumber < seqNum +1)
+                    {
+                        Console.Out.WriteLine("Received previous publication with seqNo " + sequenceNumber+". Ignoring");
                         return false;
                     }
                 }

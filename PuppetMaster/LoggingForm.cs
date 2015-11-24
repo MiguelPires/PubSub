@@ -8,9 +8,10 @@ namespace PuppetMaster
     {
         public IPuppetMasterSlave PuppetMasterSlave { get; set; }
 
-        public LoggingForm()
+        public LoggingForm(string siteName)
         {
             InitializeComponent();
+            this.Text = "Log - " + siteName;
         }
 
         public void DeliverMessage(string log)

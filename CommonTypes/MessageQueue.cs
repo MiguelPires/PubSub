@@ -3,11 +3,11 @@ using System.Collections.Generic;
 
 namespace Broker
 {
-    public class CommandQueue
+    public class MessageQueue
     {
         private readonly IDictionary<int, string[]> commands;
 
-        public CommandQueue()
+        public MessageQueue()
         {
             this.commands = new ConcurrentDictionary<int, string[]>();
         }
@@ -33,6 +33,11 @@ namespace Broker
         public ICollection<int> GetSequenceNumbers()
         {
             return commands.Keys;
+        }
+
+        public int GetCount()
+        {
+            return commands.Count;
         }
 
     }

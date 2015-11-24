@@ -35,13 +35,17 @@ namespace Publisher
                     return broker;
                 };
 
-                var brokerObject = UtilityFunctions.TryConnection<IBroker>(fun, 500, 5, brokerUrl);
+                Random rand = new Random();
+                int sleepTime = rand.Next(100, 1100);
+                var brokerObject = UtilityFunctions.TryConnection<IBroker>(fun, sleepTime, 15, brokerUrl);
                 Brokers.Add(brokerObject);
             }
         }
 
         public override void DeliverCommand(string[] command)
         {
+            // TODO - acabar de remover os locks e testar com os outros configs
+            // TODO - acho que ha um problema nas mensagens delayed
             lock(this)
             {
                 if (Status == Status.Frozen && !command[0].Equals("Unfreeze"))
@@ -58,7 +62,7 @@ namespace Publisher
                     // generic commands
                     case "Status":
                         base.DeliverCommand(command);
-                        Console.Out.WriteLine("\t" + "Sequence Number: {0}", OutSequenceNumber);
+                        Console.Out.WriteLine("\tSequence Number: "+ OutSequenceNumber);
                         Console.Out.WriteLine("*******************\t\n");
                         break;
                     case "Crash":
@@ -111,8 +115,13 @@ namespace Publisher
         public void SendPublication(string topic, string publication)
         {
             Random rand = new Random();
-            int brokersIndex = rand.Next(0, Brokers.Count);
-            IBroker broker = Brokers[brokersIndex];
+
+            IBroker broker;
+            lock (Brokers)
+            {
+                int brokersIndex = rand.Next(0, Brokers.Count);
+                broker = Brokers[brokersIndex];
+            }
 
             if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
                 ++OutSequenceNumber;
@@ -120,8 +129,7 @@ namespace Publisher
               new Thread(() => PuppetMaster.DeliverLog("PubEvent " + ProcessName + ", " + topic));
             thread.Start();
 
-            thread =
-                          new Thread(() => broker.DeliverPublication(ProcessName, topic, publication, SiteName, OutSequenceNumber));
+            thread =new Thread(() => broker.DeliverPublication(ProcessName, topic, publication, SiteName, OutSequenceNumber));
             thread.Start();
             thread.Join();
         }

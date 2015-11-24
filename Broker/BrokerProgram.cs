@@ -27,10 +27,6 @@ namespace Broker
             string parentSite = args[4];
 
             Broker broker = new Broker(processName, processUrl, puppetMasterUrl, siteName,  parentSite);
-            Console.Out.WriteLine("Config:");
-            Console.Out.WriteLine("OrderingGuarantee: {0}", broker.OrderingGuarantee);
-            Console.Out.WriteLine("RoutingPolicy: {0}", broker.RoutingPolicy);
-            Console.Out.WriteLine("LoggingLevel: {0}", broker.LoggingLevel);
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 

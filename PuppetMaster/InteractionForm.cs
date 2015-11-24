@@ -10,9 +10,10 @@ namespace PuppetMaster
     {
         private readonly IPuppetMasterMaster master;
 
-        public InteractionForm(PuppetMasterMaster master)
+        public InteractionForm(PuppetMasterMaster master, string siteName)
         {
             this.master = master;
+            this.Text = "Command - " + siteName;
             InitializeComponent();
         }
         
@@ -21,8 +22,6 @@ namespace PuppetMaster
             this.logBox.Text += message.Trim() + "\r\n";
         }
 
-
-        // TODO: Ver dos metodos vazios
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
         }
@@ -35,7 +34,9 @@ namespace PuppetMaster
         {
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
-            Thread thread = new Thread(() => this.master.SendCommand(this.IndividualBox.Text.Trim()));
+
+            string command = IndividualBox.Text;
+            Thread thread = new Thread(() => this.master.SendCommand(command.Trim()));
             thread.Start();
             this.logBox.Text += this.IndividualBox.Text + "\r\n";
             this.IndividualBox.Clear();
@@ -65,9 +66,9 @@ namespace PuppetMaster
                 }
                 else
                 {
-                    // proc.DeliverCommand(new[] {puppetArgs[1]});
+                    this.master.SendCommand(line);/*
                     Thread thread = new Thread(() => this.master.SendCommand(line));
-                    thread.Start();
+                    thread.Start();*/
                 }
                 this.logBox.Text += line + "\r\n";
                 Console.WriteLine(line);

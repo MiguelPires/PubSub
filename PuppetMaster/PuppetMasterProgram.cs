@@ -48,7 +48,7 @@ namespace PuppetMaster
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            LoggingForm form = new LoggingForm();
+            LoggingForm form = new LoggingForm(siteName);
             puppet.Form = form;
             puppet.MessageDelegate = new DelegateDeliverMessage(form.DeliverMessage);
             
@@ -83,7 +83,7 @@ namespace PuppetMaster
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            InteractionForm form = new InteractionForm(master);
+            InteractionForm form = new InteractionForm(master, siteName);
             master.LogDelegate = new DelegateDeliverMessage(form.DeliverMessage);
 
             master.Form = form;

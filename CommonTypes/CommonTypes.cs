@@ -74,7 +74,6 @@ namespace CommonTypes
     {
         void DeliverSetting(string settingType, string settingValue);
         void DeliverCommand(string[] command);
-        void SendLog(string log);
     }
 
     /// <summary>
@@ -174,26 +173,25 @@ namespace CommonTypes
         }
         public delegate T ConnectFunction<T>(string url);
         /// <summary>
-        /// TryConnection function executes a maximum "numberOfTries" times a generic connection attempt (func) between each "timeInterval".
+        /// Tries to execute the connection function for maximumTries waiting sleepInterval (miliseconds) between each try
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="func">A connectFunction delegate </param>
-        /// <param name="timeInterval">time between each try in ms</param>
-        /// <param name="numberOfTries">the number of tries</param>
+        /// <param name="connectionFunction">A connectFunction delegate </param>
+        /// <param name="sleepInterval">time between each try in ms</param>
+        /// <param name="maximumTries">the number of tries</param>
         /// <param name="url">the url to connect</param>
         /// <returns></returns>
-        public static T TryConnection<T>(ConnectFunction<T> func, int timeInterval, int numberOfTries, string url)
+        public static T TryConnection<T>(ConnectFunction<T> connectionFunction, int sleepInterval, int maximumTries, string url)
         {
-            var retryCount = numberOfTries;
-            var success = false;
+            int retryCount = maximumTries;
 
             var result = default(T);
-            while (!success && retryCount > 0)
+            while (retryCount > 0)
             {
                 try
                 {
-                    result=func(url);
-                    success = true;
+                    result = connectionFunction(url);
+                    break;
                 }
                 catch (Exception)
                 {
@@ -201,14 +199,28 @@ namespace CommonTypes
 
                     if (retryCount == 0)
                     {
-                        Console.Out.WriteLine("Error: Couldn't connect after " + numberOfTries + " tries. " + func);
-                        throw; //or handle error and break/return
+                        Console.Out.WriteLine("Error: Couldn't connect to "+url+" after " + maximumTries + " tries. ");
+                        throw; 
                     }
-                    if (timeInterval != 0)
-                        System.Threading.Thread.Sleep(timeInterval);
+
+                    if (sleepInterval != 0)
+                        System.Threading.Thread.Sleep(sleepInterval);
+
                 }
             }
             return result;
+        }
+
+        public static bool StringEquals(string s1, string s2)
+        {
+            int minLength = s1.Length < s2.Length ? s1.Length : s2.Length;
+
+            for (int i = 0; i < minLength; i++)
+            {
+                if (s1[i] != s2[i])
+                    return false;
+            }
+            return true;
         }
     }
 }

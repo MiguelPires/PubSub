@@ -29,10 +29,6 @@ namespace Publisher
             string site = args[3];
 
             Publisher publisher = new Publisher(processName, processUrl, puppetMasterUrl, site);
-            Console.Out.WriteLine("Config:");
-            Console.Out.WriteLine("OrderingGuarantee: {0}", publisher.OrderingGuarantee);
-            Console.Out.WriteLine("RoutingPolicy: {0}", publisher.RoutingPolicy);
-            Console.Out.WriteLine("LoggingLevel: {0}", publisher.LoggingLevel);
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
@@ -54,7 +50,7 @@ namespace Publisher
             ChannelServices.RegisterChannel(channel, false);
             RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof(IProcess));
 
-            Console.WriteLine(@"Running " + prop["name"]+ " at " + processUrl + " - " + site );
+            Console.WriteLine(@"Running " + processName+ " at " + processUrl + " - " + site );
             Console.ReadLine();
         }
     }

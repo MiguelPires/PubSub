@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Broker
@@ -13,7 +14,7 @@ namespace Broker
         public SubscriptionSet(string topic)
         {
             Topic = topic;
-            Processes = new Dictionary<string, string>();
+            Processes = new ConcurrentDictionary<string, string>();
         }
 
         public void AddSubscriber(string processName, string siteName)

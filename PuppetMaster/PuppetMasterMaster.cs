@@ -57,11 +57,8 @@ namespace PuppetMaster
 
         void IPuppetMaster.DeliverLog(string message)
         {
-           /* (new Thread(() =>
-            {*/
-                eventNumber++;
-                Form.BeginInvoke(LogDelegate, message + ", " + eventNumber);
-           // })).Start();
+            eventNumber++;
+            Form.BeginInvoke(LogDelegate, message + ", " + eventNumber);
         }
 
         void IPuppetMasterMaster.SendCommand(string command)
@@ -79,22 +76,21 @@ namespace PuppetMaster
                 return;
             }
 
+            // the status command 
             if (processName.Equals("all"))
             {
                 // deliver command to every remote PuppetMaster
                 foreach (IPuppetMasterSlave slave in Slaves.Values)
                 {
-                    slave.DeliverCommand(puppetArgs);
-                  /*  Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
-                    thread.Start();*/
+                    Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
+                    thread.Start();
                 }
 
                 // deliver command to every local process
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
-                    proc.DeliverCommand(new[] {puppetArgs[1]});
-                  /*   Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
-                    thread.Start();*/
+                     Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
+                    thread.Start();
                 }
             }
             else
@@ -207,15 +203,13 @@ namespace PuppetMaster
 
                 case "Freeze":
                     args[0] = tokens[1]; // process name
-                    args[1] = "Freeze"; //*f* estava freeze capslock
+                    args[1] = "Freeze"; 
                     break;
 
                 case "Unfreeze":
                     args[0] = tokens[1]; // process name
                     args[1] = "Unfreeze";
                     break;
-
-                // the wait command has a different purpose, but should also be parsed
 
                 default:
                     throw new CommandParsingException("WARNING: Unknown command: " + command);
@@ -263,10 +257,8 @@ namespace PuppetMaster
             string siteName = tokens[5];
 
             this.SiteProcesses[processName] = siteName;
-
-
-
-            // we need to keep track of all broker to inform them of the other brokers at their site
+            
+            // we need to keep track of all brokers to inform them of the other brokers at their site
             // this can only be done in the end of the parsing 
             if (processType == "broker")
             {

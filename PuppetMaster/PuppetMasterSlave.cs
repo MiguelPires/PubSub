@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq.Expressions;
+using System.Net.Sockets;
 using System.Runtime.Hosting;
+using System.Runtime.Remoting;
 using System.Security.Policy;
 using System.Threading;
 using CommonTypes;
@@ -31,7 +34,6 @@ namespace PuppetMaster
                 Form.Invoke(MessageDelegate, message + ", " + eventNumber);
                 (new Thread(() => Master.DeliverLog(message))).Start();
             }
-
             else
                 Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");
         }
@@ -101,7 +103,17 @@ namespace PuppetMaster
                 foreach (var proc in LocalProcesses.Values)
                 {
                     // the process doesn't need to receive it's own name (first index in commandArgs)
-                    Thread thread = new Thread(() => proc.DeliverCommand(new string[1] { commandArgs[1] }));
+                    Thread thread = new Thread(() =>
+                    {
+                        try
+                        {
+                            proc.DeliverCommand(new string[1] {commandArgs[1]});
+                        } catch (RemotingException)
+                        {
+                        } catch (SocketException)
+                        {
+                        }
+                    });
                     thread.Start();
                 }
             }
@@ -111,7 +123,15 @@ namespace PuppetMaster
                 string[] processArgs = new string[commandArgs.Length - 1];
                 Array.Copy(commandArgs, 1, processArgs, 0, commandArgs.Length - 1);
                 IProcess process = LocalProcesses[processName];
-                Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+                Thread thread = new Thread(() =>
+                {
+                    try
+                    {
+                        process.DeliverCommand(processArgs);
+                    }
+                    catch (RemotingException) { }
+                    catch (SocketException) { }
+                });
                 thread.Start();
             }
 

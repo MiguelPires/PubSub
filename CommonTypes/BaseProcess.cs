@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Messaging;
@@ -50,7 +51,7 @@ namespace CommonTypes
         /// Delivers a command to a process
         /// </summary>
         /// <param name="command"> The command to pass to the process</param>
-        public virtual void DeliverCommand(string[] command)
+        public virtual bool DeliverCommand(string[] command)
         {
             if (Status == Status.Frozen)
             {
@@ -60,7 +61,7 @@ namespace CommonTypes
                     case "Freeze":
                         Console.ForegroundColor = ConsoleColor.Cyan;
                         Console.BackgroundColor = ConsoleColor.Black;
-                        Console.Out.WriteLine("I'm already frozen!");
+                        Console.Out.WriteLine("Already frozen!");
                         Console.ResetColor();
                         break;
                     default:
@@ -96,9 +97,16 @@ namespace CommonTypes
 
                     default:
                         Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
-                        break;
+                        return false;
                 }
             }
+            return true;
+        }
+
+        public void Ping()
+        {
+            // used for testing a connection
+            ;
         }
 
         void IProcess.DeliverSetting(string settingType, string settingValue)
@@ -166,7 +174,7 @@ namespace CommonTypes
                 return brokerUrls;
             };
 
-            List<string> brokersUrlsResult = UtilityFunctions.TryConnection<List<string>>(fun, 0, 5, puppetMasterUrl);
+            List<string> brokersUrlsResult = UtilityFunctions.TryConnection<List<string>>(fun, puppetMasterUrl);
             return brokersUrlsResult;
         }
         
@@ -181,7 +189,7 @@ namespace CommonTypes
                 return puppet;
             };
 
-            IPuppetMaster puppetMaster = UtilityFunctions.TryConnection<IPuppetMaster>(fun, 0, 5, puppetMasterUrl);
+            IPuppetMaster puppetMaster = UtilityFunctions.TryConnection<IPuppetMaster>(fun, puppetMasterUrl);
             try
             {
                 PuppetMaster = (IPuppetMasterSlave) puppetMaster;

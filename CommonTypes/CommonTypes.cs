@@ -42,7 +42,6 @@ namespace CommonTypes
         void DeliverSetting(string settingType, string settingValue);
         void DeliverCommand(string[] commandArgs);
         void RegisterWithMaster(string siteParent, string masterName);
-       // void DeliverSettingsToLocalProcesses(string routingPolicy, string loggingLevel, string orderingGuarantee);
     }
 
     /// <summary>
@@ -50,7 +49,6 @@ namespace CommonTypes
     /// </summary>
     public interface IPuppetMasterMaster : IPuppetMaster
     {
-        //void DeliverLog(string log);
         void SendCommand(string command);
     }
 
@@ -73,7 +71,8 @@ namespace CommonTypes
     public interface IProcess
     {
         void DeliverSetting(string settingType, string settingValue);
-        void DeliverCommand(string[] command);
+        bool DeliverCommand(string[] command);
+        void Ping();
     }
 
     /// <summary>
@@ -83,9 +82,9 @@ namespace CommonTypes
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
-        void DeliverSubscription(string origin, string topic, string siteName);
-        void DeliverUnsubscription(string origin, string topic, string siteName);
-        void DeliverPublication(string origin, string topic, string publication, string siteName, int sequenceNumber);
+        void DeliverSubscription(string subscriber, string topic, string siteName);
+        void DeliverUnsubscription(string subscriber, string topic, string siteName);
+        void DeliverPublication(string publisher, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
 
@@ -94,11 +93,9 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void AddLocalSubscription(string process, string topic, string siteName);
-        void RemoveLocalSubscription(string process, string topic, string siteName);
-        void UpdatePublisherSequenceNumber(string process, int sequenceNumber);
-        /* void AddRemoteSubscription(string topic, string process);
-         void RemoveRemoteSubscription(string topic, string process);*/
+        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber);
+        void InformOfSubscription(string subscriber, string topic, string siteName);
+        void InformOfUnsubscription(string subscriber, string topic, string siteName);
     }
 
     public interface IPublisher : IProcess
@@ -181,8 +178,15 @@ namespace CommonTypes
         /// <param name="maximumTries">the number of tries</param>
         /// <param name="url">the url to connect</param>
         /// <returns></returns>
-        public static T TryConnection<T>(ConnectFunction<T> connectionFunction, int sleepInterval, int maximumTries, string url)
+        public static T TryConnection<T>(ConnectFunction<T> connectionFunction, string url, int maximumTries = 15,  int sleepInterval = -1)
         {
+            if (sleepInterval == -1)
+            {
+                Random rand = new Random();
+                sleepInterval = rand.Next(100, 2000);
+            }
+
+
             int retryCount = maximumTries;
 
             var result = default(T);

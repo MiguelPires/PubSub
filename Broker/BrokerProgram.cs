@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
@@ -44,11 +45,22 @@ namespace Broker
             prop["port"] = port;
             prop["name"] = serviceName;
 
-            TcpChannel channel = new TcpChannel(prop, null, serverProv);
-            ChannelServices.RegisterChannel(channel, false);
-            RemotingServices.Marshal(broker, prop["name"].ToString(), typeof (IBroker));
+            try
+            {
+                TcpChannel channel = new TcpChannel(prop, null, serverProv);
+                ChannelServices.RegisterChannel(channel, false);
+                RemotingServices.Marshal(broker, prop["name"].ToString(), typeof (IBroker));
+            }
+            catch (Exception)
+            {
+                Console.Out.WriteLine("********************************************\r\n");
+                Console.Out.WriteLine("\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("\r\n********************************************");
 
-            Console.WriteLine(@"Running " + prop["name"] + " at " + processUrl + " - " + siteName);
+                Console.ReadLine();
+            }
+
+            Console.WriteLine(@"Running " + processName + " at " + processUrl + " - " + siteName);
             Console.ReadLine();
         }
     }

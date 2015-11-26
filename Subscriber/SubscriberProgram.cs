@@ -46,10 +46,19 @@ namespace Subscriber
             prop["port"] = port;
             prop["name"] = serviceName;
 
-            TcpChannel channel = new TcpChannel(prop, null, serverProv);
-
-            ChannelServices.RegisterChannel(channel, false);
-            RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof(ISubscriber));
+            try
+            {
+                TcpChannel channel = new TcpChannel(prop, null, serverProv);
+                ChannelServices.RegisterChannel(channel, false);
+                RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof (ISubscriber));
+            }
+            catch (Exception)
+            {
+                Console.Out.WriteLine("********************************************\r\n");
+                Console.Out.WriteLine("\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("\r\n********************************************");
+                Console.ReadLine();
+            }
 
             Console.WriteLine(@"Running " + processName + " at " + processUrl + " - " + siteName);
             Console.ReadLine();

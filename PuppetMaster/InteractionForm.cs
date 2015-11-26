@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
@@ -15,8 +16,27 @@ namespace PuppetMaster
             this.master = master;
             this.Text = "Command - " + siteName;
             InitializeComponent();
+            IndividualBox.KeyDown += iKeyDown;
+            GroupBox.KeyDown += gKeyDown;
+
         }
-        
+
+        void iKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                IndividualButton_Click(sender, e);
+            }
+        }
+
+        void gKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                GroupButton_Click(sender, e);
+            }
+        }
+
         public void DeliverMessage(string message)
         {
             this.logBox.Text += message.Trim() + "\r\n";
@@ -36,8 +56,25 @@ namespace PuppetMaster
                 return;
 
             string command = IndividualBox.Text;
-            Thread thread = new Thread(() => this.master.SendCommand(command.Trim()));
-            thread.Start();
+            try
+            {
+                Thread thread = new Thread(() => this.master.SendCommand(command.Trim()));
+                thread.Start();
+                //this.master.SendCommand(command.Trim());
+            }
+            catch (CommandParsingException ex)
+            {
+                // TODO :this is not working properly
+                Console.Out.WriteLine(ex.Message);
+                logBox.SelectionStart = logBox.Text.Length;
+                logBox.SelectionLength = IndividualBox.Text.Length;
+                logBox.SelectionColor = Color.Red;
+                this.logBox.AppendText(this.IndividualBox.Text);
+                logBox.SelectionColor = logBox.ForeColor;
+                this.IndividualBox.Clear();
+                return;
+            }
+
             this.logBox.Text += this.IndividualBox.Text + "\r\n";
             this.IndividualBox.Clear();
             

@@ -1,10 +1,13 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
-using System.Threading.Tasks;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
@@ -40,14 +43,18 @@ namespace PuppetMaster
             // inform every broker of it's siblings
             foreach (string[] brokerArgs in BrokersStartup)
             {
-                Console.Out.WriteLine("Broker " + brokerArgs[1]);
-                IBroker broker = (IBroker)Activator.GetObject(typeof(IBroker), brokerArgs[1]);
+                IBroker broker = (IBroker) Activator.GetObject(typeof (IBroker), brokerArgs[1]);
                 foreach (string[] siblingArgs in BrokersStartup)
                 {
                     if (brokerArgs[0] == siblingArgs[0] && brokerArgs[1] != siblingArgs[1])
                     {
-                        Console.Out.WriteLine("Sibling " + siblingArgs[1]);
-                        Thread thread = new Thread(() => broker.AddSiblingBroker(siblingArgs[1]));
+                        UtilityFunctions.ConnectFunction<Object> fun = (string _) =>
+                        {
+                            broker.AddSiblingBroker(siblingArgs[1]);
+                            return null;
+                        };
+
+                        Thread thread = new Thread(() => UtilityFunctions.TryConnection(fun, ""));
                         thread.Start();
                     }
                 }
@@ -57,8 +64,8 @@ namespace PuppetMaster
 
         void IPuppetMaster.DeliverLog(string message)
         {
-            eventNumber++;
-            Form.BeginInvoke(LogDelegate, message + ", " + eventNumber);
+            this.eventNumber++;
+            Form.BeginInvoke(LogDelegate, message + ", " + this.eventNumber);
         }
 
         void IPuppetMasterMaster.SendCommand(string command)
@@ -89,7 +96,7 @@ namespace PuppetMaster
                 // deliver command to every local process
                 foreach (IProcess proc in LocalProcesses.Values)
                 {
-                     Thread thread = new Thread(() => proc.DeliverCommand(new[] { puppetArgs[1] }));
+                    Thread thread = new Thread(() => proc.DeliverCommand(new[] {puppetArgs[1]}));
                     thread.Start();
                 }
             }
@@ -114,17 +121,33 @@ namespace PuppetMaster
                     Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
                     IProcess process = LocalProcesses[processName];
 
-               /*     Thread thread = new Thread(() => process.DeliverCommand(processArgs));
+                    /*     Thread thread = new Thread(() => process.DeliverCommand(processArgs));
                     thread.Start();*/
-                    process.DeliverCommand(processArgs);
+                    try
+                    {
+                        process.DeliverCommand(processArgs);
+                    }
+                    catch (Exception)
+                    {
+                        if (!processArgs[0].Equals("Crash"))
+                            throw;
+                    }
                 }
                 else
                 {
                     IPuppetMasterSlave puppetMaster = Slaves[site];
 
-                 /*   Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
+                    /*   Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
                     thread.Start();*/
-                    puppetMaster.DeliverCommand(puppetArgs);
+                    try
+                    {
+                        puppetMaster.DeliverCommand(puppetArgs);
+                    }
+                    catch (Exception)
+                    {
+                        if (!puppetArgs[0].Equals("Crash"))
+                            throw;
+                    }
                 }
             }
         }
@@ -203,7 +226,7 @@ namespace PuppetMaster
 
                 case "Freeze":
                     args[0] = tokens[1]; // process name
-                    args[1] = "Freeze"; 
+                    args[1] = "Freeze";
                     break;
 
                 case "Unfreeze":
@@ -222,7 +245,11 @@ namespace PuppetMaster
         /// <param name="line"> A line of the config file </param>
         private void ParseConfig(string line)
         {
-            string[] tokens = line.Split(' ');
+            string[] tokens = line.Split(null);
+            for (int i = 0; i < tokens.Length; ++i) 
+            {
+                tokens[i] = tokens[i].Trim();
+            }
 
             if (tokens[0].Equals("Process"))
             {
@@ -257,12 +284,12 @@ namespace PuppetMaster
             string siteName = tokens[5];
 
             this.SiteProcesses[processName] = siteName;
-            
+
             // we need to keep track of all brokers to inform them of the other brokers at their site
             // this can only be done in the end of the parsing 
             if (processType == "broker")
             {
-                BrokersStartup.Add(new[] { siteName, processUrl });
+                BrokersStartup.Add(new[] {siteName, processUrl});
             }
 
             // if the site is this site
@@ -281,8 +308,6 @@ namespace PuppetMaster
             {
                 Console.WriteLine("WARNING: Config wasn't delivered to the site '" + siteName + "'");
             }
-
-
         }
 
         private void ParseSite(string[] tokens)
@@ -315,10 +340,9 @@ namespace PuppetMaster
                     break;
 
                 default:
-                    Console.Out.WriteLine("WARNING: "+tokens[1] + " isn't a valid ordering garantee.");
+                    Console.Out.WriteLine("WARNING: " + tokens[1] + " isn't a valid ordering garantee.");
                     break;
             }
-          
         }
 
         private void ParseRouting(string[] tokens)
@@ -330,11 +354,12 @@ namespace PuppetMaster
                     break;
 
                 case "filter":
+                case "filtering":
                     this.RoutingPolicy = RoutingPolicy.Filter;
                     break;
 
                 default:
-                    Console.Out.WriteLine("WARNING: "+tokens[1] + " isn't a valid routing policy.");
+                    Console.Out.WriteLine("WARNING: " + tokens[1] + " isn't a valid routing policy.");
                     break;
             }
         }
@@ -352,10 +377,9 @@ namespace PuppetMaster
                     break;
 
                 default:
-                    Console.Out.WriteLine("WARNING: "+tokens[1]+" isn't a valid logging level.");
+                    Console.Out.WriteLine("WARNING: " + tokens[1] + " isn't a valid logging level.");
                     break;
             }
-            
         }
 
         /// <summary>
@@ -371,33 +395,34 @@ namespace PuppetMaster
             try
             {
                 Console.WriteLine("Connecting to " + siteUrl);
-                             
+
                 UtilityFunctions.ConnectFunction<IPuppetMasterSlave> fun = (string urlToConnect) =>
+                {
+                    IPuppetMasterSlave puppetMasterSlave =
+                        (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), urlToConnect);
+                    puppetMasterSlave.Ping();
+                    puppetMasterSlave.RegisterWithMaster(siteParent, SiteName);
+                    puppetMasterSlave.DeliverSetting("RoutingPolicy",
+                        this.RoutingPolicy == RoutingPolicy.Filter ? "filter" : "flooding");
+                    puppetMasterSlave.DeliverSetting("LoggingLevel", this.LoggingLevel == LoggingLevel.Full ? "full" : "light");
+
+                    switch (this.OrderingGuarantee)
                     {
-                        IPuppetMasterSlave puppetMasterSlave = (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), urlToConnect);
-                        puppetMasterSlave.Ping();
-                        puppetMasterSlave.RegisterWithMaster(siteParent, SiteName);
-                        puppetMasterSlave.DeliverSetting("RoutingPolicy",
-                            RoutingPolicy == RoutingPolicy.Filter ? "filter" : "flooding");
-                        puppetMasterSlave.DeliverSetting("LoggingLevel", LoggingLevel == LoggingLevel.Full ? "full" : "light");
+                        case OrderingGuarantee.Fifo:
+                            puppetMasterSlave.DeliverSetting("OrderingGuarantee", "FIFO");
+                            break;
+                        case OrderingGuarantee.No:
+                            puppetMasterSlave.DeliverSetting("OrderingGuarantee", "NO");
+                            break;
+                        case OrderingGuarantee.Total:
+                            puppetMasterSlave.DeliverSetting("OrderingGuarantee", "TOTAL");
+                            break;
+                    }
+                    return puppetMasterSlave;
+                };
 
-                        switch (OrderingGuarantee)
-                        {
-                            case OrderingGuarantee.Fifo:
-                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "FIFO");
-                                break;
-                            case OrderingGuarantee.No:
-                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "NO");
-                                break;
-                            case OrderingGuarantee.Total:
-                                puppetMasterSlave.DeliverSetting("OrderingGuarantee", "TOTAL");
-                                break;
-                        }
-                        return puppetMasterSlave;
-                    };
-
-                var slave = UtilityFunctions.TryConnection<IPuppetMasterSlave>(fun, 500, 5, siteUrl);
-                Slaves.Add(name,slave);
+                var slave = UtilityFunctions.TryConnection(fun, siteUrl);
+                Slaves.Add(name, slave);
 
                 return slave;
             }

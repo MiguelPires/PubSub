@@ -11,20 +11,23 @@ namespace Publisher
 {
     internal class Publisher : BaseProcess, IPublisher
     {
+        // this class' random instance. Since the default seed is time dependent we don«t
+        // want to instantiate every time we send a message
+        private readonly Random _random = new Random();
         // this site's brokers
         public List<IBroker> Brokers { get; set; }
         // the sequence number used by messages sent to the broker group
-        public int OutSequenceNumber { get; private set; }
+        public int OutSequenceNumber { get; private set; } = 0;
         //
-        public int EventNumber { get; private set; }
+        public int EventNumber { get; private set; } = 1;
+        // the sent publications
+        public ProcessHistory History { get; } = new ProcessHistory();
 
         public Publisher(string processName, string processUrl, string puppetMasterUrl, string siteName)
             : base(processName, processUrl, puppetMasterUrl, siteName)
         {
             Brokers = new List<IBroker>();
             List<string> brokerUrls = GetBrokers(puppetMasterUrl);
-            OutSequenceNumber = 0;
-            EventNumber = 0;
 
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
@@ -101,54 +104,71 @@ namespace Publisher
             return true;
         }
 
-        public void SendPublication(string topic, string publication)
+        public void SendPublication(string topic, string publication, int sequenceNumber=-1)
         {
-            Random rand = new Random();
             int seqNo = 0;
-            if (this.OrderingGuarantee == OrderingGuarantee.Fifo)
+            if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber == -1)
             {
-                lock (this)
+                if (sequenceNumber == -1)
                 {
-                    ++OutSequenceNumber;
-                    seqNo = OutSequenceNumber;
+                    lock (this)
+                    {
+                        ++OutSequenceNumber;
+                        seqNo = OutSequenceNumber;
+                    }
+                } else
+                {
+                    seqNo = sequenceNumber;
                 }
-            }
+            } 
 
             Thread thread =
                    new Thread(() => PuppetMaster.DeliverLog("PubEvent " + ProcessName + ", " + topic));
             thread.Start();
 
-            bool retry = true; 
-            while (retry)
+            thread = new Thread(() =>
             {
-                IBroker broker;
-                int brokerIndex;
-                lock (Brokers)
+                bool retry = true;
+                while (retry)
                 {
-                    brokerIndex = rand.Next(0, Brokers.Count);
-                    broker = Brokers[brokerIndex];
+                    IBroker broker;
+                    int brokerIndex;
+                    lock (Brokers)
+                    {
+                        brokerIndex = this._random.Next(Brokers.Count);
+                        broker = Brokers[brokerIndex];
+                    }
+
+                    Thread subThread = new Thread(() =>
+                    {
+                        try
+                        {
+                            broker.DeliverPublication(ProcessName, topic, publication, SiteName, seqNo);
+                            retry = false;
+                        }
+                        catch (Exception)
+                        {
+                            Console.Out.WriteLine("Failed sending to broker. Resending");
+                        }
+                    });
+                    subThread.Start();
+                    subThread.Join();
                 }
 
-                thread = new Thread(() =>
-                {
-                    try
-                    {
-                        broker.DeliverPublication(ProcessName, topic, publication, SiteName, seqNo);
-                        retry = false;
-                    }
-                    catch (Exception)
-                    {
-                        Console.Out.WriteLine("Failed sending to broker.");
-                        lock (Brokers)
-                        {
-                            Brokers.RemoveAt(brokerIndex);
-                            
-                        }
-                    }
-                });
-                thread.Start();
-                thread.Join();
-            }
+            });
+            History.AddMessage(new string[] { topic, publication }, seqNo);
+
+            thread.Start();
+
+        }
+
+        public void RequestPublication(int sequenceNumber)
+        {
+            string[] message = History.GetMessage(sequenceNumber);
+            if (message == null)
+                return;
+
+            SendPublication(message[0], message[1], sequenceNumber);
         }
 
         private bool Publish(string[] command)

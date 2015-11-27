@@ -93,14 +93,16 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber);
+        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string process);
         void InformOfSubscription(string subscriber, string topic, string siteName);
         void InformOfUnsubscription(string subscriber, string topic, string siteName);
+        void RequestPublication(string publisher, string requestingSite, int sequenceNumber);
     }
 
     public interface IPublisher : IProcess
     {
-        void SendPublication(string topic, string publication);
+        void SendPublication(string topic, string publication, int sequenceNumber);
+        void RequestPublication(int sequenceNumber);
     }
 
     public interface ISubscriber : IProcess

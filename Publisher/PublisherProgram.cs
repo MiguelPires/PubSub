@@ -50,7 +50,7 @@ namespace Publisher
             {
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
-                RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof (IProcess));
+                RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof (IPublisher));
             }
             catch (Exception)
             {

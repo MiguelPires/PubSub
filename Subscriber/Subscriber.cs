@@ -159,9 +159,15 @@ namespace Subscriber
         /// <returns> Returns true if it should be further processed or false if it shouldn't </returns>
         private bool PublicationReceived(string publication, string topic, string process, int sequenceNumber)
         {
-            int seqNum;
-            if (SequenceNumbers.TryGetValue(process, out seqNum))
+            lock (HoldbackQueue)
             {
+                int seqNum;
+                if (!SequenceNumbers.TryGetValue(process, out seqNum))
+                {
+                    seqNum = 0;
+                    SequenceNumbers[process] = 0;
+                }
+
                 if (sequenceNumber > seqNum + 1)
                 {
                     MessageQueue queue;
@@ -169,20 +175,20 @@ namespace Subscriber
                         queue = new MessageQueue();
 
                     Console.Out.WriteLine("Queueing publication '" + publication + "' with seq " + sequenceNumber);
-                    queue.AddCommand(new[] {publication, topic, process}, sequenceNumber);
+                    queue.AddCommand(new[] { publication, topic, process }, sequenceNumber);
                     HoldbackQueue[process] = queue;
                     return false;
                 }
-                if (sequenceNumber < seqNum + 1)
-                {
-                    Console.Out.WriteLine("Received previous publication with seqNo " + sequenceNumber + ". Ignoring");
-                    return false;
-                }
-            } else
-            {
-                SequenceNumbers[process] = sequenceNumber-1;
-                Console.Out.WriteLine("Setting baseline for " + process + " at " + sequenceNumber);
+                if (sequenceNumber == seqNum + 1)
+                    return true;
+
+                Console.Out.WriteLine("Received previous publication with seqNo " + sequenceNumber + ". Ignoring");
+                return false;
+                // first message from this publisher
+              /*  SequenceNumbers[process] = sequenceNumber - 1;
+                Console.Out.WriteLine("Setting baseline for " + process + " at " + sequenceNumber);*/
             }
+            
             return true;
         }
 
@@ -194,29 +200,32 @@ namespace Subscriber
         /// <param name="sequenceNumber"> The message's sequence number </param>
         private void PublicationProcessed(string topic, string process, int sequenceNumber)
         {
-            int seqNum;
-            if (!SequenceNumbers.TryGetValue(process, out seqNum))
-                seqNum = 0;
-
-            if (sequenceNumber == seqNum + 1)
+            lock (HoldbackQueue)
             {
-                ++SequenceNumbers[process];
-                Thread thread =
-                    new Thread(
-                        () => PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + process + ", " + topic));
-                thread.Start();
+                int seqNum;
+                if (!SequenceNumbers.TryGetValue(process, out seqNum))
+                    seqNum = 0;
 
-                MessageQueue queue;
-                if (HoldbackQueue.TryGetValue(process, out queue))
+                if (sequenceNumber == seqNum + 1)
                 {
-                    string[] command = queue.GetCommandAndRemove(sequenceNumber + 1);
-                    if (command == null)
-                        return;
-                    Console.Out.WriteLine("Unblocking publication with seq " + (sequenceNumber + 1));
-
-                    thread = new Thread(
-                        () => DeliverPublication(command[0], command[1], command[2], sequenceNumber + 1));
+                    ++SequenceNumbers[process];
+                    Thread thread =
+                        new Thread(
+                            () => PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + process + ", " + topic));
                     thread.Start();
+
+                    MessageQueue queue;
+                    if (HoldbackQueue.TryGetValue(process, out queue))
+                    {
+                        string[] command = queue.GetCommandAndRemove(sequenceNumber + 1);
+                        if (command == null)
+                            return;
+                        Console.Out.WriteLine("Unblocking publication with seq " + (sequenceNumber + 1));
+
+                        thread = new Thread(
+                            () => DeliverPublication(command[0], command[1], command[2], sequenceNumber + 1));
+                        thread.Start();
+                    }
                 }
             }
         }
@@ -242,7 +251,6 @@ namespace Subscriber
             bool retry = true;
             while (retry)
             {
-                IBroker broker;
                 int brokerIndex;
                 lock (Brokers)
                 {
@@ -287,7 +295,6 @@ namespace Subscriber
             bool retry = true;
             while (retry)
             {
-                IBroker broker;
                 int brokerIndex;
                 lock (Brokers)
                 {

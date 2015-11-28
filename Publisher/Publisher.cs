@@ -132,10 +132,9 @@ namespace Publisher
                 while (retry)
                 {
                     IBroker broker;
-                    int brokerIndex;
                     lock (Brokers)
                     {
-                        brokerIndex = this._random.Next(Brokers.Count);
+                        int brokerIndex = this._random.Next(Brokers.Count);
                         broker = Brokers[brokerIndex];
                     }
 

@@ -96,7 +96,7 @@ namespace CommonTypes
         void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string process);
         void InformOfSubscription(string subscriber, string topic, string siteName);
         void InformOfUnsubscription(string subscriber, string topic, string siteName);
-        void RequestPublication(string publisher, string requestingSite, int sequenceNumber);
+        void RequestPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber=null);
     }
 
     public interface IPublisher : IProcess
@@ -107,7 +107,7 @@ namespace CommonTypes
 
     public interface ISubscriber : IProcess
     {
-        void DeliverPublication(string publication, string topic, string process, int sequenceNumber);
+        void DeliverPublication(string publisher, string topic, string publication, int sequenceNumber);
     }
 
     /// <summary>

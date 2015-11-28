@@ -1,6 +1,7 @@
 ﻿#region
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
@@ -23,6 +24,8 @@ namespace PuppetMaster
         public IDictionary<string, string> SiteProcesses;
         //
         public Delegate LogDelegate { get; set; }
+        // log queue
+        public ConcurrentQueue<string> LogQueue = new ConcurrentQueue<string>();
 
         public PuppetMasterMaster(string siteName) : base(siteName)
         {
@@ -59,13 +62,31 @@ namespace PuppetMaster
                     }
                 }
             }
+            
+            new Thread(() =>
+            {
+                Monitor.Enter(LogQueue);
+                while (true)
+                {
+                    string logMessage;
+                    if (LogQueue.TryDequeue(out logMessage))
+                    {
+                        this.eventNumber++;
+                        Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+                    } else
+                    {
+                        Monitor.Wait(LogQueue);
+                    }
+                }
+            }).Start();
         }
-
 
         void IPuppetMaster.DeliverLog(string message)
         {
-            this.eventNumber++;
-            Form.BeginInvoke(LogDelegate, message + ", " + this.eventNumber);
+            Monitor.Enter(LogQueue);
+            LogQueue.Enqueue(message);
+            Monitor.Pulse(LogQueue);
+            Monitor.Exit(LogQueue);
         }
 
         void IPuppetMasterMaster.SendCommand(string command)

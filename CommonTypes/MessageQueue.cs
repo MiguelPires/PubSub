@@ -1,43 +1,44 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Broker
 {
     public class MessageQueue
     {
-        private readonly IDictionary<int, string[]> commands;
-
-        public MessageQueue()
+        private readonly IDictionary<int, string[]> _messages = new ConcurrentDictionary<int, string[]>();
+        
+        public void Add(string[] message, int sequenceNumber)
         {
-            this.commands = new ConcurrentDictionary<int, string[]>();
+            this._messages[sequenceNumber] = message;
         }
 
-        public void AddCommand(string[] command, int sequenceNumber)
+        public string[] GetAndRemove(int sequenceNumber)
         {
-            this.commands[sequenceNumber] = command;
-        }
+            string[] message;
 
-        public string[] GetCommandAndRemove(int sequenceNumber)
-        {
-            string[] command;
-
-            if (this.commands.TryGetValue(sequenceNumber, out command))
+            if (this._messages.TryGetValue(sequenceNumber, out message))
             { 
-                commands.Remove(sequenceNumber);
-                return command;
+                this._messages.Remove(sequenceNumber);
+                return message;
             }
 
             return null;
         }
 
+        public string[] GetFirstAndRemove()
+        {
+            return GetAndRemove(_messages.Keys.Min());
+        }
+
         public ICollection<int> GetSequenceNumbers()
         {
-            return commands.Keys;
+            return this._messages.Keys;
         }
 
         public int GetCount()
         {
-            return commands.Count;
+            return this._messages.Count;
         }
 
     }

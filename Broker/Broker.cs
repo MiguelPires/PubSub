@@ -45,10 +45,6 @@ namespace Broker
         // history of messages sent by publishers to each site
         public MessageHistory History { get; } = new MessageHistory();
 
-        // this class' random instance. Since the default seed is time dependent we don«t
-        // want to instantiate every time we send a message
-        private readonly Random _random = new Random();
-
         public Broker(string name, string url, string puppetMasterUrl, string siteName, string parentSite)
             : base(name, url, puppetMasterUrl, siteName)
         {
@@ -129,40 +125,36 @@ namespace Broker
         {
             Console.Out.WriteLine("Deliver pub - seqNo " + sequenceNumber);
 
-          /*  if (PublicationReceived(publisher, topic, publication, fromSite, sequenceNumber))
-            {*/
-                // we might have just one broker for debug purposes
-                if (SiblingBrokers.Count != 0)
+            // we might have just one broker for debug purposes
+            if (SiblingBrokers.Count != 0)
+            {
+                lock (SiblingBrokers)
                 {
-                    lock (SiblingBrokers)
+                    // multicast the publication
+                    foreach (var broker in SiblingBrokers)
                     {
-                        // multicast the publication
-                        foreach (var broker in SiblingBrokers)
-                        {
-                            Thread thread =
-                                new Thread(() =>
+                        Thread thread =
+                            new Thread(() =>
+                            {
+                                try
                                 {
-                                    try
-                                    {
-                                        broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber, ProcessName);
-                                        // TODO: for testing purposes only!!
-                                        // hangs the process that should deliver the publication
-                                       /* if (ProcessName.Equals("broker00"))
-                                            Process.GetCurrentProcess().Kill();*/
-                                    }
-                                    catch (RemotingException)
-                                    {
-                                    }
-                                    catch (SocketException)
-                                    {
-                                    }
-                                });
-                            thread.Start();
-                        }
+                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
+                                        ProcessName);
+                                    // TODO: for testing purposes only!!
+                                    // hangs the process that should deliver the publication
+                                     if (ProcessName.Equals("broker3"))
+                                            Process.GetCurrentProcess().Kill();
+                                } catch (RemotingException)
+                                {
+                                } catch (SocketException)
+                                {
+                                }
+                            });
+                        thread.Start();
                     }
-                } else
-                    ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, ProcessName);
-         //   }
+                }
+            } else
+                ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, ProcessName);
         }
 
         public void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber,
@@ -209,7 +201,8 @@ namespace Broker
                             {
                                 try
                                 {
-                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
+                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
+                                        deliverProcess);
                                 } catch (RemotingException)
                                 {
                                 } catch (SocketException)
@@ -242,10 +235,10 @@ namespace Broker
                     lastNumber = 0;
 
                 // just in case
-                if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber != lastNumber+1)
+                if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber != lastNumber + 1)
                     return;
 
-                Console.Out.WriteLine("Update pub'"+publication+"' seq " + sequenceNumber);
+                Console.Out.WriteLine("Update pub'" + publication + "' seq " + sequenceNumber);
                 InSequenceNumbers[publisher] = sequenceNumber;
 
                 // to be stored later 
@@ -397,7 +390,8 @@ namespace Broker
             }
         }
 
-        private void ProcessPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string deliverProcess)
+        private void ProcessPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber,
+            string deliverProcess)
         {
             // creates a subscriber lock if needed
             object procLock;
@@ -411,7 +405,7 @@ namespace Broker
                 if (!PublicationReceived(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess))
                     return;
 
-                    int lastNumber;
+                int lastNumber;
                 if (!InSequenceNumbers.TryGetValue(publisher, out lastNumber))
                     lastNumber = 0;
 
@@ -467,7 +461,7 @@ namespace Broker
                                 {
                                     try
                                     {
-                                        subscriber.DeliverPublication(publication, topic, publisher, seqNum);
+                                        subscriber.DeliverPublication(publisher, topic, publication, seqNum);
                                     } catch (RemotingException)
                                     {
                                     } catch (SocketException)
@@ -481,7 +475,6 @@ namespace Broker
 
                 if (this.RoutingPolicy == RoutingPolicy.Flood)
                 {
-
                     foreach (KeyValuePair<string, List<IBroker>> child in Children)
                     {
                         List<IBroker> childBrokers = child.Value;
@@ -507,13 +500,23 @@ namespace Broker
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(child.Key, messageToStore);
 
+                            // send log
+                            if (this.LoggingLevel == LoggingLevel.Full)
+                            {
+                                Thread logThread =
+                                    new Thread(
+                                        () =>
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic));
+                                logThread.Start();
+                            }
                             Thread thread = new Thread(() =>
                             {
                                 bool retry = true;
                                 while (retry)
                                 {
                                     // picks a random broker for load-balancing purposes
-                                    int childIndex = _random.Next(0, childBrokers.Count);
+                                    int childIndex = this.Random.Next(0, childBrokers.Count);
                                     IBroker childBroker = childBrokers[childIndex];
 
                                     Thread subThread =
@@ -534,18 +537,7 @@ namespace Broker
                                     subThread.Join();
                                 }
                             });
-
                             thread.Start();
-
-                            if (this.LoggingLevel == LoggingLevel.Full)
-                            {
-                                thread =
-                                    new Thread(
-                                        () =>
-                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                thread.Start();
-                            }
                         }
                     }
 
@@ -570,6 +562,16 @@ namespace Broker
                         messageToStore[4] = seqNum.ToString();
                         History.StorePublication(ParentSite, messageToStore);
 
+
+                        if (this.LoggingLevel == LoggingLevel.Full)
+                        {
+                            Thread logThread =
+                                new Thread(
+                                    () =>
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic));
+                            logThread.Start();
+                        }
+
                         Thread thread = new Thread(() =>
                         {
                             bool retry = true;
@@ -579,7 +581,7 @@ namespace Broker
                                 lock (ParentBrokers)
                                 {
                                     // picks a random broker for load-balancing purposes
-                                    int parentIndex = _random.Next(0, ParentBrokers.Count);
+                                    int parentIndex = this.Random.Next(0, ParentBrokers.Count);
                                     parent = ParentBrokers[parentIndex];
                                 }
 
@@ -602,15 +604,6 @@ namespace Broker
                         });
 
                         thread.Start();
-
-                        if (this.LoggingLevel == LoggingLevel.Full)
-                        {
-                            thread =
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic));
-                            thread.Start();
-                        }
                     }
                 } else if (matchList != null)
                 {
@@ -649,11 +642,21 @@ namespace Broker
                             // store the publication
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(match.Value, messageToStore);
-                            //Console.Out.WriteLine("Storing "+sequenceNumber);
 
                             Console.Out.WriteLine("Sending pub " + publication + " to site " + match.Value +
                                                   " with seq " +
                                                   seqNum);
+
+                            // send log
+                            if (this.LoggingLevel == LoggingLevel.Full)
+                            {
+                                Thread logThread =
+                                    new Thread(
+                                        () =>
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic));
+                                logThread.Start();
+                            }
 
                             Thread thread = new Thread(() =>
                             {
@@ -663,7 +666,7 @@ namespace Broker
                                     IBroker broker;
                                     lock (brokers)
                                     {
-                                        int brokerIndex = _random.Next(0, brokers.Count);
+                                        int brokerIndex = this.Random.Next(0, brokers.Count);
                                         broker = brokers[brokerIndex];
                                     }
 
@@ -684,18 +687,7 @@ namespace Broker
                                     subThread.Join();
                                 }
                             });
-
                             thread.Start();
-
-                            if (this.LoggingLevel == LoggingLevel.Full)
-                            {
-                                thread =
-                                    new Thread(
-                                        () =>
-                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                thread.Start();
-                            }
                         }
 
                         if (ParentSite.Equals(match.Value))
@@ -718,6 +710,17 @@ namespace Broker
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(ParentSite, messageToStore);
 
+                            // send log
+                            if (this.LoggingLevel == LoggingLevel.Full)
+                            {
+                                Thread logThread =
+                                    new Thread(
+                                        () =>
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic));
+                                logThread.Start();
+                            }
+
                             Thread thread = new Thread(() =>
                             {
                                 bool retry = true;
@@ -726,7 +729,7 @@ namespace Broker
                                     IBroker parent;
                                     lock (ParentBrokers)
                                     {
-                                        int brokerIndex = _random.Next(0, ParentBrokers.Count);
+                                        int brokerIndex = this.Random.Next(0, ParentBrokers.Count);
                                         parent = ParentBrokers[brokerIndex];
                                     }
 
@@ -751,16 +754,6 @@ namespace Broker
 
                             thread.Start();
                             SentSites.Add(match.Value);
-
-                            if (this.LoggingLevel == LoggingLevel.Full)
-                            {
-                                thread =
-                                    new Thread(
-                                        () =>
-                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                thread.Start();
-                            }
                         }
                     }
                 }
@@ -818,11 +811,11 @@ namespace Broker
                         {
                             return false;
                         }
-                        queue.AddCommand(eventMessage, sequenceNumber);
+                        queue.Add(eventMessage, sequenceNumber);
                     } else
                     {
                         queue = new MessageQueue();
-                        queue.AddCommand(eventMessage, sequenceNumber);
+                        queue.Add(eventMessage, sequenceNumber);
                         HoldbackQueue[publisher] = queue;
                     }
 
@@ -840,10 +833,9 @@ namespace Broker
                             lock (HoldbackQueue)
                             {
                                 MessageQueue checkQueue;
-                                if (HoldbackQueue.TryGetValue(publisher, out checkQueue) && 
+                                if (HoldbackQueue.TryGetValue(publisher, out checkQueue) &&
                                     checkQueue.GetSequenceNumbers().Any())
                                 {
-
                                     int minSeqNo = checkQueue.GetSequenceNumbers().Min();
                                     if (minSeqNo == sequenceNumber)
                                     {
@@ -861,7 +853,7 @@ namespace Broker
                             }
                         }
                     }).Start();
-                 
+
                     return false;
                 }
             }
@@ -877,7 +869,7 @@ namespace Broker
             {
                 Console.Out.WriteLine("Requesting resend from local publisher");
 
-                IPublisher pub = (IPublisher)proc;
+                IPublisher pub = (IPublisher) proc;
                 new Thread(() => pub.RequestPublication(sequenceNumber - 1)).Start();
                 return;
             }
@@ -903,7 +895,7 @@ namespace Broker
                         lock (brokers)
                         {
                             // picks a random broker for load-balancing purposes
-                            int brokerIndex = _random.Next(0, brokers.Count);
+                            int brokerIndex = this.Random.Next(0, brokers.Count);
                             broker = brokers[brokerIndex];
                         }
 
@@ -914,11 +906,9 @@ namespace Broker
                                 {
                                     broker.RequestPublication(publisher, SiteName, sequenceNumber - 1);
                                     retry = false;
-                                }
-                                catch (RemotingException)
+                                } catch (RemotingException)
                                 {
-                                }
-                                catch (SocketException)
+                                } catch (SocketException)
                                 {
                                 }
                             });
@@ -955,22 +945,23 @@ namespace Broker
                 MessageQueue queue;
                 if (HoldbackQueue.TryGetValue(publisher, out queue))
                 {
-                    string[] message = queue.GetCommandAndRemove(sequenceNumber + 1);
+                    string[] message = queue.GetAndRemove(sequenceNumber + 1);
                     if (message == null)
                     {
                         return;
                     }
-                    Console.Out.WriteLine("Unblocking message " + "with sequence number: " + (sequenceNumber + 1));
+                    Console.Out.WriteLine("Unblocking message with sequence number: " + (sequenceNumber + 1));
 
                     if (message[6].Equals(ProcessName))
                         ProcessPublication(message[1], message[2], message[3], message[4], int.Parse(message[5]), message[6]);
                     else
-                        StorePublicationInHistory(message[1], message[2], message[3], message[4], int.Parse(message[5]), message[6]);
+                        StorePublicationInHistory(message[1], message[2], message[3], message[4], int.Parse(message[5]),
+                            message[6]);
                 }
             }
         }
 
-        public void RequestPublication(string publisher, string requestingSite, int sequenceNumber)
+        public void RequestPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber=null)
         {
             lock (ProcessLocks[publisher])
             {
@@ -982,10 +973,38 @@ namespace Broker
                     return;
                 }
 
-                if (requestingSite.Equals(SiteName))
-                    return;
+                Thread thread;
 
-                List<IBroker> brokers = null;
+                // in this case, a subscriber requested a resend
+                if (requestingSite.Equals(SiteName) && subscriber != null)
+                {
+                    IProcess proc;
+                    ISubscriber sub;
+                    if (LocalProcesses.TryGetValue(subscriber, out proc))
+                    {
+                        sub = (ISubscriber) proc;
+                    } else
+                        return;
+
+                    thread = new Thread(() => {
+                     try
+                     {
+                         sub.DeliverPublication(message[0], message[1], message[2], int.Parse(message[4]));
+                     }
+                     catch (RemotingException)
+                     {
+                     }
+                     catch (SocketException)
+                     {
+                     }
+                     
+                 });
+                    thread.Start();
+                    return;
+                }
+                    
+
+                List<IBroker> brokers;
 
                 if (requestingSite.Equals(ParentSite))
                     brokers = ParentBrokers;
@@ -995,8 +1014,21 @@ namespace Broker
                     Console.Out.WriteLine("WARNING: The requesting site '" + requestingSite + "' couldn't be found.");
                     return;
                 }
+
+                if (this.LoggingLevel == LoggingLevel.Full)
+                {
+                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                            message[1]);
+                    /*thread =
+                        new Thread(
+                            () =>
+                                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                        message[1]));
+                    thread.Start();*/
+                }
+
                 Console.Out.WriteLine("Resending pub to " + requestingSite);
-                Thread thread =
+                thread =
                     new Thread(() =>
                     {
                         bool retry = true;
@@ -1006,7 +1038,7 @@ namespace Broker
                             lock (brokers)
                             {
                                 // picks a random broker for load-balancing purposes
-                                int childIndex = _random.Next(0, brokers.Count);
+                                int childIndex = this.Random.Next(0, brokers.Count);
                                 broker = brokers[childIndex];
                             }
 
@@ -1029,15 +1061,6 @@ namespace Broker
                         }
                     });
                 thread.Start();
-                if (this.LoggingLevel == LoggingLevel.Full)
-                {
-                    thread =
-                        new Thread(
-                            () =>
-                                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                        message[1]));
-                    thread.Start();
-                }
             }
         }
 
@@ -1049,9 +1072,9 @@ namespace Broker
 
         public void DeliverSubscription(string subscriber, string topic, string siteName)
         {
-            object objLock;
             lock (this)
             {
+                object objLock;
                 if (!ProcessLocks.TryGetValue(subscriber, out objLock))
                 {
                     ProcessLocks[subscriber] = new object();
@@ -1105,6 +1128,7 @@ namespace Broker
 
             lock (ProcessLocks[subscriber])
             {
+                Console.Out.WriteLine("Inform");
                 // the subscription is already registered
                 SubscriptionSet set;
                 if (RoutingTable.TryGetValue(topic, out set) && set.Processes.ContainsKey(subscriber))
@@ -1178,6 +1202,15 @@ namespace Broker
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(siteName))
                     {
+                       /* if (this.LoggingLevel == LoggingLevel.Full)
+                        {
+                           // PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
+                            Thread logThread =
+                                new Thread(
+                                    () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
+                            logThread.Start();
+                        }*/
+
                         Thread thread =
                             new Thread(() =>
                             {
@@ -1188,7 +1221,7 @@ namespace Broker
                                     lock (childBrokers)
                                     {
                                         // picks a random broker for load-balancing purposes
-                                        int childIndex = _random.Next(0, childBrokers.Count);
+                                        int childIndex = this.Random.Next(0, childBrokers.Count);
                                         childBroker = childBrokers[childIndex];
                                     }
 
@@ -1210,20 +1243,21 @@ namespace Broker
                                 }
                             });
                         thread.Start();
-
-                        if (this.LoggingLevel == LoggingLevel.Full)
-                        {
-                            thread =
-                                new Thread(
-                                    () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                            thread.Start();
-                        }
                     }
                 }
 
                 // we don't send the subscription to where it came from
                 if (!ParentSite.Equals(siteName) && !ParentSite.Equals("none"))
                 {
+                    /*if (this.LoggingLevel == LoggingLevel.Full)
+                    {
+                        //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
+                        Thread logThread =
+                            new Thread(
+                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
+                        logThread.Start();
+                    }*/
+
                     Thread thread = new Thread(() =>
                     {
                         bool retry = true;
@@ -1233,7 +1267,7 @@ namespace Broker
                             lock (ParentBrokers)
                             {
                                 // picks a random broker for load-balancing purposes
-                                int parentIndex = _random.Next(0, ParentBrokers.Count);
+                                int parentIndex = this.Random.Next(0, ParentBrokers.Count);
                                 parent = ParentBrokers[parentIndex];
                             }
 
@@ -1255,15 +1289,7 @@ namespace Broker
                         }
                     });
                     thread.Start();
-                    if (this.LoggingLevel == LoggingLevel.Full)
-                    {
-                        Console.Out.WriteLine("Envia log");
 
-                        thread =
-                            new Thread(
-                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                        thread.Start();
-                    }
                 }
             }
         }
@@ -1352,13 +1378,23 @@ namespace Broker
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(siteName))
                     {
+                       /* if (this.LoggingLevel == LoggingLevel.Full)
+                        {
+                            //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
+                            Thread logThread =
+                                new Thread(
+                                    () =>
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
+                            logThread.Start();
+                        }*/
+
                         Thread thread = new Thread(() =>
                         {
                             bool retry = true;
                             while (retry)
                             {
                                 // picks a random broker for load-balancing purposes
-                                int childIndex = _random.Next(0, childBrokers.Count);
+                                int childIndex = this.Random.Next(0, childBrokers.Count);
                                 IBroker childBroker = childBrokers[childIndex];
 
                                 Thread subThread = new Thread(() =>
@@ -1379,20 +1415,22 @@ namespace Broker
                         });
                         thread.Start();
 
-                        if (this.LoggingLevel == LoggingLevel.Full)
-                        {
-                            thread =
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                            thread.Start();
-                        }
+                        
                     }
                 }
 
                 // we don't send the subscription to where it came from
                 if (!ParentSite.Equals(siteName) && !ParentSite.Equals("none"))
                 {
+                  /*  if (this.LoggingLevel == LoggingLevel.Full)
+                    {
+                        //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
+                        Thread logThread =
+                            new Thread(
+                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
+                        logThread.Start();
+                    }*/
+                    
                     Thread thread = new Thread(() =>
                     {
                         bool retry = true;
@@ -1402,7 +1440,7 @@ namespace Broker
                             lock (ParentBrokers)
                             {
                                 // picks a random broker for load-balancing purposes
-                                int parentIndex = _random.Next(0, ParentBrokers.Count);
+                                int parentIndex = this.Random.Next(0, ParentBrokers.Count);
                                 parent = ParentBrokers[parentIndex];
                             }
 
@@ -1425,13 +1463,7 @@ namespace Broker
 
                     thread.Start();
 
-                    if (this.LoggingLevel == LoggingLevel.Full)
-                    {
-                        thread =
-                            new Thread(
-                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                        thread.Start();
-                    }
+                    
                 }
             }
         }

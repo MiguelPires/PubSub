@@ -50,7 +50,7 @@ namespace PuppetMaster
             Application.SetCompatibleTextRenderingDefault(false);
             LoggingForm form = new LoggingForm(siteName);
             puppet.Form = form;
-            puppet.MessageDelegate = new DelegateDeliverMessage(form.DeliverMessage);
+            puppet.LogDelegate = new DelegateDeliverMessage(form.DeliverMessage);
             
             Application.Run(form);
 

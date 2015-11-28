@@ -31,7 +31,7 @@ namespace PuppetMaster
 
         void gKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.Enter && Control.ModifierKeys != Keys.Shift)
             {
                 GroupButton_Click(sender, e);
             }

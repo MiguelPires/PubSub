@@ -3,6 +3,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net.Sockets;
+using System.Runtime.Remoting;
 using System.Threading;
 using Broker;
 using CommonTypes;
@@ -131,20 +134,21 @@ namespace Subscriber
             Console.Out.WriteLine("*******************\t\n");
         }
 
-        public void DeliverPublication(string publication, string topic, string process, int sequenceNumber)
+        /// <summary>
+        ///     Delivers publication according to the specified ordering garantee
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="topic"></param>
+        /// <param name="publication"></param>
+        /// <param name="sequenceNumber"></param>
+        public void DeliverPublication(string publisher, string topic, string publication, int sequenceNumber)
         {
-            if (this.OrderingGuarantee == OrderingGuarantee.No)
-            {
-                Console.Out.WriteLine("Received publication '" + publication + "'");
-                return;
-            }
-
             lock (HoldbackQueue)
             {
-                if (PublicationReceived(publication, topic, process, sequenceNumber))
+                if (PublicationReceived(publisher, topic, publication, sequenceNumber))
                 {
                     Console.Out.WriteLine("Received publication '" + publication + "' with seq no " + sequenceNumber);
-                    PublicationProcessed(topic, process, sequenceNumber);
+                    PublicationProcessed(publisher, topic, sequenceNumber);
                 }
             }
         }
@@ -157,85 +161,156 @@ namespace Subscriber
         /// <param name="publication"></param>
         /// <param name="sequenceNumber"></param>
         /// <returns> Returns true if it should be further processed or false if it shouldn't </returns>
-        private bool PublicationReceived(string publication, string topic, string process, int sequenceNumber)
+        private bool PublicationReceived(string publisher, string topic, string publication, int sequenceNumber)
         {
-            lock (HoldbackQueue)
+            int seqNum;
+            if (!SequenceNumbers.TryGetValue(publisher, out seqNum))
             {
-                int seqNum;
-                if (!SequenceNumbers.TryGetValue(process, out seqNum))
-                {
-                    seqNum = 0;
-                    SequenceNumbers[process] = 0;
-                }
-
-                if (sequenceNumber > seqNum + 1)
-                {
-                    MessageQueue queue;
-                    if (!HoldbackQueue.TryGetValue(process, out queue))
-                        queue = new MessageQueue();
-
-                    Console.Out.WriteLine("Queueing publication '" + publication + "' with seq " + sequenceNumber);
-                    queue.AddCommand(new[] { publication, topic, process }, sequenceNumber);
-                    HoldbackQueue[process] = queue;
-                    return false;
-                }
-                if (sequenceNumber == seqNum + 1)
-                    return true;
-
-                Console.Out.WriteLine("Received previous publication with seqNo " + sequenceNumber + ". Ignoring");
-                return false;
-                // first message from this publisher
-              /*  SequenceNumbers[process] = sequenceNumber - 1;
-                Console.Out.WriteLine("Setting baseline for " + process + " at " + sequenceNumber);*/
+                seqNum = 0;
+                SequenceNumbers[publisher] = 0;
             }
-            
-            return true;
+
+            // we queue if the ordering is incorrect or we're frozen
+            if ((OrderingGuarantee == OrderingGuarantee.Fifo &&sequenceNumber > seqNum + 1) || 
+                Status == Status.Frozen)
+            {
+                MessageQueue queue;
+                if (!HoldbackQueue.TryGetValue(publisher, out queue))
+                    queue = new MessageQueue();
+
+                Console.Out.WriteLine("Queueing publication '" + publication + "' with seq " + sequenceNumber);
+                queue.Add(new[] { publisher, publication, topic, sequenceNumber.ToString()}, sequenceNumber);
+                HoldbackQueue[publisher] = queue;
+
+                new Thread(() =>
+                {
+                    while (true)
+                    {
+                        // waits half a second before checking the queue.  if the minimum sequence
+                        // number is this one, then our message didn't arrive and it's the one blocking 
+                        // the queue. In that case, we request it
+                        Thread.Sleep(500);
+                        lock (HoldbackQueue)
+                        {
+                            MessageQueue checkQueue;
+                            if (HoldbackQueue.TryGetValue(publisher, out checkQueue) &&
+                                checkQueue.GetSequenceNumbers().Any())
+                            {
+                                int minSeqNo = checkQueue.GetSequenceNumbers().Min();
+                                if (minSeqNo == sequenceNumber)
+                                {
+                                    Request(publisher, sequenceNumber);
+                                    return;
+                                }
+                                // if the minimum sequence number is smaller than ours 
+                                // we wait and repeat
+                                if (minSeqNo < sequenceNumber)
+                                    continue;
+
+                                return;
+                            }
+                            return;
+                        }
+                    }
+                }).Start();
+
+                return false;
+            }
+
+            // if everything is right with the ordering we deliver
+            if (OrderingGuarantee == OrderingGuarantee.No || sequenceNumber == seqNum + 1)
+                return true;
+
+            Console.Out.WriteLine("Received previous publication with seqNo " + sequenceNumber + ". Ignoring");
+            return false;
         }
 
         /// <summary>
         ///     Updates this subscriber's state. Updates sequence numbers, unblocks delayed messages (if any), etc
         /// </summary>
         /// <param name="topic"> The subscribed topic </param>
-        /// <param name="process"> The publisher </param>
+        /// <param name="publisher"> The publisher </param>
         /// <param name="sequenceNumber"> The message's sequence number </param>
-        private void PublicationProcessed(string topic, string process, int sequenceNumber)
+        private void PublicationProcessed(string publisher, string topic, int sequenceNumber)
         {
-            lock (HoldbackQueue)
+            ++SequenceNumbers[publisher];
+            Thread thread =
+                new Thread(
+                    () => PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + publisher + ", " + topic));
+            thread.Start();
+
+            MessageQueue queue;
+            if (HoldbackQueue.TryGetValue(publisher, out queue))
             {
-                int seqNum;
-                if (!SequenceNumbers.TryGetValue(process, out seqNum))
-                    seqNum = 0;
+                string[] command = queue.GetAndRemove(sequenceNumber + 1);
+                if (command == null)
+                    return;
+                Console.Out.WriteLine("Unblocking publication with seq " + (sequenceNumber + 1));
 
-                if (sequenceNumber == seqNum + 1)
-                {
-                    ++SequenceNumbers[process];
-                    Thread thread =
-                        new Thread(
-                            () => PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + process + ", " + topic));
-                    thread.Start();
-
-                    MessageQueue queue;
-                    if (HoldbackQueue.TryGetValue(process, out queue))
-                    {
-                        string[] command = queue.GetCommandAndRemove(sequenceNumber + 1);
-                        if (command == null)
-                            return;
-                        Console.Out.WriteLine("Unblocking publication with seq " + (sequenceNumber + 1));
-
-                        thread = new Thread(
-                            () => DeliverPublication(command[0], command[1], command[2], sequenceNumber + 1));
-                        thread.Start();
-                    }
-                }
+                thread = new Thread(
+                    () => DeliverPublication(command[0], command[1], command[2], sequenceNumber + 1));
+                thread.Start();
             }
+        }
+
+        /// <summary>
+        ///     Requests a specific publication for a broker
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="sequenceNumber"></param>
+        private void Request(string publisher, int sequenceNumber)
+        {
+            Console.Out.WriteLine("Requesting resend of seq no "+(sequenceNumber-1)+" from broker");
+            Thread thread =
+                new Thread(() =>
+                {
+                    bool retry = true;
+                    while (retry)
+                    {
+                        IBroker broker;
+                        lock (Brokers)
+                        {
+                            // picks a random broker for load-balancing purposes
+                            int brokerIndex = this.Random.Next(0, Brokers.Count);
+                            broker = Brokers[brokerIndex];
+                        }
+
+                        Thread subThread =
+                            new Thread(() =>
+                            {
+                                try
+                                {
+                                    broker.RequestPublication(publisher, SiteName, sequenceNumber - 1, ProcessName);
+                                    retry = false;
+                                }
+                                catch (RemotingException)
+                                {
+                                }
+                                catch (SocketException)
+                                {
+                                }
+                            });
+                        subThread.Start();
+                        subThread.Join();
+                    }
+                });
+            thread.Start();
         }
 
         public void ProcessFrozenListCommands()
         {
+
             string[] command;
             while (CommandBacklog.TryDequeue(out command))
             {
                 DeliverCommand(command);
+            }
+
+            foreach (MessageQueue queue in HoldbackQueue.Values)
+            {
+                string[] message;
+                if ((message = queue.GetFirstAndRemove()) != null)
+                    DeliverPublication(message[0], message[1], message[2], int.Parse(message[3]));
             }
         }
 
@@ -245,16 +320,14 @@ namespace Subscriber
         /// <param name="topic"> The topic of the subscription </param>
         private void SendSubscription(string topic)
         {
-            // picks a random broker for load-balancing purposes
-
-            Random rand = new Random();
             bool retry = true;
             while (retry)
             {
+                // picks a random broker for load-balancing purposes
                 int brokerIndex;
                 lock (Brokers)
                 {
-                    brokerIndex = rand.Next(0, Brokers.Count);
+                    brokerIndex = Random.Next(0, Brokers.Count);
                 }
 
                 Thread thread = new Thread(() =>
@@ -265,11 +338,7 @@ namespace Subscriber
                         retry = false;
                     } catch (Exception)
                     {
-                        Console.Out.WriteLine("Failed sending to broker.");
-                        lock (Brokers)
-                        {
-                            Brokers.RemoveAt(brokerIndex);
-                        }
+                        Console.Out.WriteLine("Failed sending subscription to broker. Resending");
                     }
                 });
                 thread.Start();
@@ -289,16 +358,14 @@ namespace Subscriber
                 }
             }
 
-            // picks a random broker for load-balancing purposes
-
-            Random rand = new Random();
             bool retry = true;
             while (retry)
             {
+                // picks a random broker for load-balancing purposes
                 int brokerIndex;
                 lock (Brokers)
                 {
-                    brokerIndex = rand.Next(0, Brokers.Count);
+                    brokerIndex = Random.Next(0, Brokers.Count);
                 }
 
                 Thread thread = new Thread(() =>
@@ -309,11 +376,7 @@ namespace Subscriber
                         retry = false;
                     } catch (Exception)
                     {
-                        Console.Out.WriteLine("Failed sending to broker.");
-                        lock (Brokers)
-                        {
-                            Brokers.RemoveAt(brokerIndex);
-                        }
+                        Console.Out.WriteLine("Failed sending unsubscription to broker. Resending");
                     }
                 });
                 thread.Start();

@@ -31,8 +31,9 @@ namespace CommonTypes
         public OrderingGuarantee OrderingGuarantee;
         // the routing setting
         public RoutingPolicy RoutingPolicy;
-        //Number of Retries to connect
-        public const int NumberOfRetries = 5;
+        // this class' random instance. Since the default seed is time dependent we don«t
+        // want to instantiate every time we send a message
+        protected readonly Random Random = new Random();
 
         protected BaseProcess(string processName, string processUrl, string puppetMasterUrl, string siteName)
         {

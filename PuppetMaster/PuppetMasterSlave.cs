@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq.Expressions;
@@ -18,21 +19,44 @@ namespace PuppetMaster
         // the PuppetMasterMaster object
         public IPuppetMasterMaster Master { get; private set; }
         //
-        public Delegate MessageDelegate { get; set; }
+        public Delegate LogDelegate { get; set; }
+        // log queue
+        public ConcurrentQueue<string> LogQueue = new ConcurrentQueue<string>();
 
         public PuppetMasterSlave(string siteName) : base(siteName)
         {
-            //MessageDelegate = new PuppetMasterProgram.DelegateDeliverMessage(Form.DeliverMessage);
             LocalProcesses = new Dictionary<string, IProcess>();
+
+            new Thread(() =>
+            {
+                Monitor.Enter(LogQueue);
+                while (true)
+                {
+                    string logMessage;
+                    if (LogQueue.TryDequeue(out logMessage))
+                    {
+                        this.eventNumber++;
+                        Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+                        Master.DeliverLog(logMessage);
+                    }
+                    else
+                    {
+                        Monitor.Wait(LogQueue);
+                    }
+
+                }
+
+            }).Start();
         }
 
         void IPuppetMaster.DeliverLog(string message)
         {
             if (!string.IsNullOrEmpty(message))
             {
-                eventNumber++;
-                Form.Invoke(MessageDelegate, message + ", " + eventNumber);
-                (new Thread(() => Master.DeliverLog(message))).Start();
+                Monitor.Enter(LogQueue);
+                LogQueue.Enqueue(message);
+                Monitor.Pulse(LogQueue);
+                Monitor.Exit(LogQueue);
             }
             else
                 Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");

@@ -16,36 +16,86 @@ namespace PuppetMaster
     {
         // GUI
         public LoggingForm Form { get; set; }
-        // the PuppetMasterMaster object
+        // the PuppetMasterMaster instance
         public IPuppetMasterMaster Master { get; private set; }
-        //
-        public Delegate LogDelegate { get; set; }
-        // log queue
-        public ConcurrentQueue<string> LogQueue = new ConcurrentQueue<string>();
 
         public PuppetMasterSlave(string siteName) : base(siteName)
         {
             LocalProcesses = new Dictionary<string, IProcess>();
+            InitializeLogWriter();
+            InitializeCommandSender();
+        }
 
+        /// <summary>
+        ///     Initializes a thread reads log messages from a buffer
+        /// writes them in the GUI and also sends them to the PuppetMasterMaster
+        /// </summary>
+        private void InitializeLogWriter()
+        {
             new Thread(() =>
             {
-                Monitor.Enter(LogQueue);
+                Monitor.Enter(this.LogQueue);
                 while (true)
                 {
                     string logMessage;
-                    if (LogQueue.TryDequeue(out logMessage))
+                    if (this.LogQueue.TryDequeue(out logMessage))
                     {
                         this.eventNumber++;
                         Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
                         Master.DeliverLog(logMessage);
+                    } else
+                    {
+                        Monitor.Wait(this.LogQueue);
+                    }
+                }
+            }).Start();
+        }
+
+        /// <summary>
+        ///     Initializes a thread that reads commands from a buffer
+        /// and sends them to the processes
+        /// </summary>
+        private void InitializeCommandSender()
+        {
+            new Thread(() =>
+            {
+                Monitor.Enter(CommandQueue);
+                while (true)
+                {
+                    string[] command;
+                    if (CommandQueue.TryDequeue(out command))
+                    {
+                        string processName = command[0];
+                        if (processName.Equals("all"))
+                        {
+                            foreach (var proc in LocalProcesses.Values)
+                            {
+                                // the process doesn't need to receive it's own name (first index in commandArgs)
+                                try
+                                {
+                                    proc.DeliverCommand(new string[1] { command[1] });
+                                }
+                                catch (RemotingException)
+                                {
+                                }
+                                catch (SocketException)
+                                {
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // it doesn't need to receive it's own name here as well..
+                            string[] processArgs = new string[command.Length - 1];
+                            Array.Copy(command, 1, processArgs, 0, command.Length - 1);
+                            IProcess process = LocalProcesses[processName];
+
+                            process.DeliverCommand(processArgs);
+                        }
                     }
                     else
-                    {
-                        Monitor.Wait(LogQueue);
-                    }
-
+                        Monitor.Wait(CommandQueue);
                 }
-
             }).Start();
         }
 
@@ -121,44 +171,10 @@ namespace PuppetMaster
 
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
-            string processName = commandArgs[0];
-            if (processName.Equals("all"))
-            {
-                foreach (var proc in LocalProcesses.Values)
-                {
-                    // the process doesn't need to receive it's own name (first index in commandArgs)
-                    Thread thread = new Thread(() =>
-                    {
-                        try
-                        {
-                            proc.DeliverCommand(new string[1] {commandArgs[1]});
-                        } catch (RemotingException)
-                        {
-                        } catch (SocketException)
-                        {
-                        }
-                    });
-                    thread.Start();
-                }
-            }
-            else
-            {
-                //it doesn't need to receive it's own name here as well..
-                string[] processArgs = new string[commandArgs.Length - 1];
-                Array.Copy(commandArgs, 1, processArgs, 0, commandArgs.Length - 1);
-                IProcess process = LocalProcesses[processName];
-                Thread thread = new Thread(() =>
-                {
-                    try
-                    {
-                        process.DeliverCommand(processArgs);
-                    }
-                    catch (RemotingException) { }
-                    catch (SocketException) { }
-                });
-                thread.Start();
-            }
-
+            Monitor.Enter(CommandQueue);
+            CommandQueue.Enqueue(commandArgs);
+            Monitor.Pulse(CommandQueue);
+            Monitor.Exit(CommandQueue);
         }
 
         /// <summary>
@@ -210,7 +226,5 @@ namespace PuppetMaster
         {
             return "PuppetMasterSlave";
         }
-
-
     }
 }

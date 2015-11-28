@@ -22,10 +22,7 @@ namespace PuppetMaster
         public List<string[]> BrokersStartup { get; }
         // maps a process to it's site name
         public IDictionary<string, string> SiteProcesses;
-        //
-        public Delegate LogDelegate { get; set; }
-        // log queue
-        public ConcurrentQueue<string> LogQueue = new ConcurrentQueue<string>();
+
 
         public PuppetMasterMaster(string siteName) : base(siteName)
         {
@@ -63,114 +60,129 @@ namespace PuppetMaster
                 }
             }
             
+            InitializeLogWriter();
+            InitializeCommandSender();
+        }
+
+        /// <summary>
+        ///     Initializes a thread that reads log messages from a buffer
+        /// and writes them on the GUI
+        /// </summary>
+        private void InitializeLogWriter()
+        {
+            // writes logs in the GUI
             new Thread(() =>
             {
-                Monitor.Enter(LogQueue);
+                Monitor.Enter(this.LogQueue);
                 while (true)
                 {
                     string logMessage;
-                    if (LogQueue.TryDequeue(out logMessage))
+                    if (this.LogQueue.TryDequeue(out logMessage))
                     {
                         this.eventNumber++;
                         Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
-                    } else
-                    {
-                        Monitor.Wait(LogQueue);
                     }
+                    else
+                    {
+                        Monitor.Wait(this.LogQueue);
+                    }
+                }
+            }).Start();
+        }
+        
+        /// <summary>
+        ///     Initializes a thread that reads commands from a buffer and sends
+        /// them to either local processes or PuppetMasterSlaves
+        /// </summary>
+        private void InitializeCommandSender()
+        {
+            // sends commands introduced from the GUI
+            new Thread(() =>
+            {
+                Monitor.Enter(this.CommandQueue);
+                while (true)
+                {
+                    string[] command;
+                    if (this.CommandQueue.TryDequeue(out command))
+                    {
+                        string processName = command[0];
+
+                        // the status command 
+                        if (processName.Equals("all"))
+                        {
+                            // deliver command to every remote PuppetMaster
+                            foreach (IPuppetMasterSlave slave in Slaves.Values)
+                            {
+                                slave.DeliverCommand(command);
+                            }
+
+                            // deliver command to every local process
+                            foreach (IProcess proc in LocalProcesses.Values)
+                            {
+                                proc.DeliverCommand(new[] {command[1]});
+                            }
+                        } else
+                        {
+                            // find the process's site
+                            string site = null;
+                            if (!SiteProcesses.TryGetValue(processName, out site))
+                            {
+                                Console.Out.WriteLine("WARNING: The process " + processName + " couldn't be found.");
+                                return;
+                            }
+
+                            if (site.Equals(SiteName))
+                            {
+                                // the process doesn't need to receive it's own name (first index in puppetArgs)
+                                string[] processArgs = new string[command.Length - 1];
+                                Array.Copy(command, 1, processArgs, 0, command.Length - 1);
+                                IProcess process = LocalProcesses[processName];
+                                
+                                try
+                                {
+                                    process.DeliverCommand(processArgs);
+                                } catch (Exception)
+                                {
+                                    // the crash command is supposed to generate an exception
+                                    if (!processArgs[0].Equals("Crash"))
+                                        throw;
+                                }
+                            } else
+                            {
+                                try
+                                {
+                                    Slaves[site].DeliverCommand(command);
+                                } catch (Exception)
+                                {
+                                    if (!command[0].Equals("Crash"))
+                                        throw;
+                                }
+                            }
+                        }
+                    } else
+                        Monitor.Wait(this.CommandQueue);
                 }
             }).Start();
         }
 
         void IPuppetMaster.DeliverLog(string message)
         {
-            Monitor.Enter(LogQueue);
-            LogQueue.Enqueue(message);
-            Monitor.Pulse(LogQueue);
-            Monitor.Exit(LogQueue);
+            Monitor.Enter(this.LogQueue);
+            this.LogQueue.Enqueue(message);
+            Monitor.Pulse(this.LogQueue);
+            Monitor.Exit(this.LogQueue);
         }
 
         void IPuppetMasterMaster.SendCommand(string command)
         {
             string[] puppetArgs;
-            string processName;
-            try
-            {
-                ParseCommand(command, out puppetArgs);
-                processName = puppetArgs[0];
-            }
-            catch (CommandParsingException e)
-            {
-                Console.WriteLine(e.Message);
-                return;
-            }
+            ParseCommand(command, out puppetArgs);
+            Monitor.Enter(this.CommandQueue);
+            this.CommandQueue.Enqueue(puppetArgs);
+            Monitor.Pulse(this.CommandQueue);
+            Monitor.Exit(this.CommandQueue);
+            
 
-            // the status command 
-            if (processName.Equals("all"))
-            {
-                // deliver command to every remote PuppetMaster
-                foreach (IPuppetMasterSlave slave in Slaves.Values)
-                {
-                    Thread thread = new Thread(() => slave.DeliverCommand(puppetArgs));
-                    thread.Start();
-                }
-
-                // deliver command to every local process
-                foreach (IProcess proc in LocalProcesses.Values)
-                {
-                    Thread thread = new Thread(() => proc.DeliverCommand(new[] {puppetArgs[1]}));
-                    thread.Start();
-                }
-            }
-            else
-            {
-                // find the process's site
-                string site = null;
-                try
-                {
-                    site = this.SiteProcesses[processName];
-                }
-                catch (KeyNotFoundException)
-                {
-                    Console.Out.WriteLine("WARNING: The process " + processName + " couldn't be found.");
-                    return;
-                }
-
-                if (site.Equals(SiteName))
-                {
-                    // the process doesn't need to receive it's own name (first index in puppetArgs)
-                    string[] processArgs = new string[puppetArgs.Length - 1];
-                    Array.Copy(puppetArgs, 1, processArgs, 0, puppetArgs.Length - 1);
-                    IProcess process = LocalProcesses[processName];
-
-                    /*     Thread thread = new Thread(() => process.DeliverCommand(processArgs));
-                    thread.Start();*/
-                    try
-                    {
-                        process.DeliverCommand(processArgs);
-                    }
-                    catch (Exception)
-                    {
-                        if (!processArgs[0].Equals("Crash"))
-                            throw;
-                    }
-                }
-                else
-                {
-                    IPuppetMasterSlave puppetMaster = Slaves[site];
-
-                    /*   Thread thread = new Thread(() => puppetMaster.DeliverCommand(puppetArgs));
-                    thread.Start();*/
-                    try
-                    {
-                        puppetMaster.DeliverCommand(puppetArgs);
-                    }
-                    catch (Exception)
-                    {
-                        if (!puppetArgs[0].Equals("Crash"))
-                            throw;
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -213,50 +225,64 @@ namespace PuppetMaster
         /// <param name="args">An output parameter with the arguments to be passed to the process, if any</param>
         private static void ParseCommand(string command, out string[] args)
         {
-            string[] tokens = command.Split(' ');
-            args = new string[5];
-            switch (tokens[0])
+            try
             {
-                case "Subscriber":
-                    args[0] = tokens[1]; // process name
-                    args[1] = tokens[2]; // Subscribe/Unsubsribe
-                    args[2] = tokens[3]; // topic
-                    break;
+                string[] tokens = command.Split(' ');
+                for (int i = 0; i < tokens.Length; ++i)
+                {
+                    tokens[i] = tokens[i].Trim();
+                }
 
-                case "Publisher":
-                    if (tokens.Length != 8)
-                    {
-                        throw new CommandParsingException("Unknown command: " + command);
-                    }
-                    args[0] = tokens[1]; // process name
-                    args[1] = "Publish";
-                    args[2] = tokens[3]; // number of events
-                    args[3] = tokens[5]; // topic name
-                    args[4] = tokens[7]; // time interval (ms)
-                    break;
+                args = new string[5];
+                switch (tokens[0])
+                {
+                    case "Subscriber":
+                        if ((!tokens[2].Equals("Subscribe") && !tokens[2].Equals("Unsubscribe")) || 
+                            tokens.Length != 4)
+                            throw new CommandParsingException("WARNING - Unknown command: "+command);
+                        args[0] = tokens[1]; // process name
+                        args[1] = tokens[2]; // Subscribe/Unsubsribe
+                        args[2] = tokens[3]; // topic
+                        break;
 
-                case "Status":
-                    args[0] = "all"; // process name
-                    args[1] = "Status";
-                    break;
+                    case "Publisher":
+                        if (tokens.Length != 8)
+                        {
+                            throw new CommandParsingException("Unknown command: " + command);
+                        }
+                        args[0] = tokens[1]; // process name
+                        args[1] = "Publish";
+                        args[2] = tokens[3]; // number of events
+                        args[3] = tokens[5]; // topic name
+                        args[4] = tokens[7]; // time interval (ms)
+                        break;
 
-                case "Crash":
-                    args[0] = tokens[1]; // process name
-                    args[1] = "Crash";
-                    break;
+                    case "Status":
+                        args[0] = "all"; // process name
+                        args[1] = "Status";
+                        break;
 
-                case "Freeze":
-                    args[0] = tokens[1]; // process name
-                    args[1] = "Freeze";
-                    break;
+                    case "Crash":
+                        args[0] = tokens[1]; // process name
+                        args[1] = "Crash";
+                        break;
 
-                case "Unfreeze":
-                    args[0] = tokens[1]; // process name
-                    args[1] = "Unfreeze";
-                    break;
+                    case "Freeze":
+                        args[0] = tokens[1]; // process name
+                        args[1] = "Freeze";
+                        break;
 
-                default:
-                    throw new CommandParsingException("WARNING: Unknown command: " + command);
+                    case "Unfreeze":
+                        args[0] = tokens[1]; // process name
+                        args[1] = "Unfreeze";
+                        break;
+
+                    default:
+                        throw new CommandParsingException("WARNING: Unknown command: " + command);
+                }
+            } catch (IndexOutOfRangeException)
+            {
+                throw new CommandParsingException("WARNING: Incorrect command");
             }
         }
 

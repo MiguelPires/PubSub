@@ -2,6 +2,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
+using System.Windows.Forms;
 using CommonTypes;
 
 namespace PuppetMaster
@@ -15,11 +17,11 @@ namespace PuppetMaster
         // this site's url
         public string Url { get; protected set; }
         // maps a process name to the process instance
-        public IDictionary<string, IProcess> LocalProcesses { get; protected set; }
+        public IDictionary<string, IProcess> LocalProcesses { get; protected set; } = new ConcurrentDictionary<string, IProcess>();
         // maps a process name to a process type - necessary to find the brokers
-        public IDictionary<string, ProcessType> LocalProcessesTypes { get; protected set; }
+        public IDictionary<string, ProcessType> LocalProcessesTypes { get; protected set; } = new ConcurrentDictionary<string, ProcessType>();
         // maps a process name to it's url
-        public IDictionary<string, string> LocalProcessesUrls { get; protected set; }
+        public IDictionary<string, string> LocalProcessesUrls { get; protected set; } = new ConcurrentDictionary<string, string>();
         // the logging setting
         public LoggingLevel LoggingLevel = LoggingLevel.Light;
         // the ordering setting
@@ -27,16 +29,18 @@ namespace PuppetMaster
         // the routing setting
         public RoutingPolicy RoutingPolicy = RoutingPolicy.Flood;
         // for ordering the log entries
-        protected int eventNumber;
+        protected int eventNumber = 0;
+        // the log queue
+        public ConcurrentQueue<string> LogQueue = new ConcurrentQueue<string>();
+        // the command queue
+        public ConcurrentQueue<string[]> CommandQueue = new ConcurrentQueue<string[]>();
+        // delegate used to write in the GUI
+        public Delegate LogDelegate { get; set; }
 
         protected BasePuppet(string siteName)
         {
             SiteName = siteName;
             Url = UtilityFunctions.GetUrl(SiteName);
-            LocalProcesses = new ConcurrentDictionary<string, IProcess>();
-            LocalProcessesTypes = new ConcurrentDictionary<string, ProcessType>();
-            LocalProcessesUrls = new ConcurrentDictionary<string, string>();
-            eventNumber = 0;
         }
 
         /// <summary>

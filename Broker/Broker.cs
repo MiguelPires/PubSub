@@ -142,8 +142,8 @@ namespace Broker
                                         ProcessName);
                                     // TODO: for testing purposes only!!
                                     // hangs the process that should deliver the publication
-                                     if (ProcessName.Equals("broker3"))
-                                            Process.GetCurrentProcess().Kill();
+                                    /* if (ProcessName.Equals("broker3"))
+                                            Process.GetCurrentProcess().Kill();*/
                                 } catch (RemotingException)
                                 {
                                 } catch (SocketException)
@@ -974,7 +974,6 @@ namespace Broker
                 }
 
                 Thread thread;
-
                 // in this case, a subscriber requested a resend
                 if (requestingSite.Equals(SiteName) && subscriber != null)
                 {

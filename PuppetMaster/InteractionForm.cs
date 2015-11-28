@@ -39,7 +39,11 @@ namespace PuppetMaster
 
         public void DeliverMessage(string message)
         {
-            this.logBox.Text += message.Trim() + "\r\n";
+            int start = logBox.Text.Length;
+            int end = start + message.Length;
+            this.logBox.AppendText(message.Trim() + "\r\n");
+            logBox.Select(start, end);
+            logBox.SelectionColor = Color.Black;
         }
 
         private void textBox1_TextChanged(object sender, EventArgs e)
@@ -55,29 +59,25 @@ namespace PuppetMaster
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
 
+            int start = logBox.Text.Length;
+            int end = start + IndividualBox.Text.Length;
+
             string command = IndividualBox.Text;
             try
             {
-                Thread thread = new Thread(() => this.master.SendCommand(command.Trim()));
-                thread.Start();
-                //this.master.SendCommand(command.Trim());
+                this.master.SendCommand(command.Trim());
+                this.logBox.AppendText(this.IndividualBox.Text + "\r\n");
+                logBox.Select(start, end);
+                logBox.SelectionColor = Color.Black;
             }
             catch (CommandParsingException ex)
             {
-                // TODO :this is not working properly
                 Console.Out.WriteLine(ex.Message);
-                logBox.SelectionStart = logBox.Text.Length;
-                logBox.SelectionLength = IndividualBox.Text.Length;
+                this.logBox.AppendText(this.IndividualBox.Text+"\r\n");
+                logBox.Select(start, end);
                 logBox.SelectionColor = Color.Red;
-                this.logBox.AppendText(this.IndividualBox.Text);
-                logBox.SelectionColor = logBox.ForeColor;
-                this.IndividualBox.Clear();
-                return;
             }
-
-            this.logBox.Text += this.IndividualBox.Text + "\r\n";
             this.IndividualBox.Clear();
-            
         }
 
         private void GroupBox_TextChanged(object sender, EventArgs e)
@@ -93,22 +93,41 @@ namespace PuppetMaster
 
             foreach (string line in lines)
             {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                int start = logBox.Text.Length;
+                int end = start + line.Length;
+                this.logBox.AppendText(line + "\r\n");
+
                 string[] tokens = line.Split(' ');
                 if (tokens[0].Equals("Wait"))
                 {
                     if (tokens.Length != 2)
+                    {
+                        logBox.Select(start, end);
+                        logBox.SelectionColor = Color.Red;
                         continue;
+                    }
                     int numVal = Int32.Parse(tokens[1]);
-                    System.Threading.Thread.Sleep(numVal);
+                    Thread.Sleep(numVal);
                 }
                 else
                 {
-                    this.master.SendCommand(line);/*
-                    Thread thread = new Thread(() => this.master.SendCommand(line));
-                    thread.Start();*/
+                    try
+                    {
+                        this.master.SendCommand(line);
+                    } catch (CommandParsingException ex)
+                    {
+                        Console.Out.WriteLine(ex.Message);
+                        logBox.Select(start, end);
+                        logBox.SelectionColor = Color.Red;
+                        continue;
+                    }
                 }
-                this.logBox.Text += line + "\r\n";
-                Console.WriteLine(line);
+
+                logBox.Select(start, end);
+                logBox.SelectionColor = Color.Black;
             }
 
             this.GroupBox.Clear();

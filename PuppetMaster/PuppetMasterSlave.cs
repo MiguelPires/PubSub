@@ -1,14 +1,13 @@
-﻿using System;
-using System.Collections.Concurrent;
+﻿#region
+
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq.Expressions;
 using System.Net.Sockets;
-using System.Runtime.Hosting;
 using System.Runtime.Remoting;
-using System.Security.Policy;
 using System.Threading;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
@@ -41,8 +40,18 @@ namespace PuppetMaster
                     if (this.LogQueue.TryDequeue(out logMessage))
                     {
                         this.eventNumber++;
+
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                Master.DeliverLog(logMessage);
+                            } catch (Exception ex)
+                            {
+                                Utility.DebugLog(ex.Message);
+                            }
+                        }).Start();
                         Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
-                        Master.DeliverLog(logMessage);
                     } else
                     {
                         Monitor.Wait(this.LogQueue);
@@ -59,11 +68,11 @@ namespace PuppetMaster
         {
             new Thread(() =>
             {
-                Monitor.Enter(CommandQueue);
+                Monitor.Enter(this.CommandQueue);
                 while (true)
                 {
                     string[] command;
-                    if (CommandQueue.TryDequeue(out command))
+                    if (this.CommandQueue.TryDequeue(out command))
                     {
                         string processName = command[0];
                         if (processName.Equals("all"))
@@ -71,30 +80,30 @@ namespace PuppetMaster
                             foreach (var proc in LocalProcesses.Values)
                             {
                                 // the process doesn't need to receive it's own name (first index in commandArgs)
-                                try
+
+                                new Thread(() =>
                                 {
-                                    proc.DeliverCommand(new string[1] { command[1] });
-                                }
-                                catch (RemotingException)
-                                {
-                                }
-                                catch (SocketException)
-                                {
-                                }
+                                    try
+                                    {
+                                        proc.DeliverCommand(new string[1] {command[1]});
+                                    } catch (RemotingException)
+                                    {
+                                    } catch (SocketException)
+                                    {
+                                    }
+                                }).Start();
                             }
-                        }
-                        else
+                        } else
                         {
                             // it doesn't need to receive it's own name here as well..
                             string[] processArgs = new string[command.Length - 1];
                             Array.Copy(command, 1, processArgs, 0, command.Length - 1);
                             IProcess process = LocalProcesses[processName];
 
-                            process.DeliverCommand(processArgs);
+                            new Thread(() => process.DeliverCommand(processArgs)).Start();
                         }
-                    }
-                    else
-                        Monitor.Wait(CommandQueue);
+                    } else
+                        Monitor.Wait(this.CommandQueue);
                 }
             }).Start();
         }
@@ -103,12 +112,11 @@ namespace PuppetMaster
         {
             if (!string.IsNullOrEmpty(message))
             {
-                Monitor.Enter(LogQueue);
-                LogQueue.Enqueue(message);
-                Monitor.Pulse(LogQueue);
-                Monitor.Exit(LogQueue);
-            }
-            else
+                Monitor.Enter(this.LogQueue);
+                this.LogQueue.Enqueue(message);
+                Monitor.Pulse(this.LogQueue);
+                Monitor.Exit(this.LogQueue);
+            } else
                 Console.WriteLine(@"Problem - SendLog: The log line shouldn't be empty");
         }
 
@@ -166,15 +174,15 @@ namespace PuppetMaster
                     }
                     break;
             }
-            Console.Out.WriteLine(settingType+": "  + settingValue);
+            Console.Out.WriteLine(settingType + ": " + settingValue);
         }
 
         void IPuppetMasterSlave.DeliverCommand(string[] commandArgs)
         {
-            Monitor.Enter(CommandQueue);
-            CommandQueue.Enqueue(commandArgs);
-            Monitor.Pulse(CommandQueue);
-            Monitor.Exit(CommandQueue);
+            Monitor.Enter(this.CommandQueue);
+            this.CommandQueue.Enqueue(commandArgs);
+            Monitor.Pulse(this.CommandQueue);
+            Monitor.Exit(this.CommandQueue);
         }
 
         /// <summary>
@@ -185,10 +193,9 @@ namespace PuppetMaster
         void IPuppetMasterSlave.RegisterWithMaster(string siteParent, string masterSite)
         {
             ParentSite = siteParent;
-            string url = "tcp://localhost:" + UtilityFunctions.GetPort(masterSite) + "/" + masterSite;
-            Master = (IPuppetMasterMaster)Activator.GetObject(typeof(IPuppetMasterMaster), url);
+            string url = "tcp://localhost:" + Utility.GetPort(masterSite) + "/" + masterSite;
+            Master = (IPuppetMasterMaster) Activator.GetObject(typeof (IPuppetMasterMaster), url);
         }
-
 
         /// <summary>
         /// Returns every Broker at this site - user by brokers to connect to the parent site's brokers
@@ -201,17 +208,17 @@ namespace PuppetMaster
 
         public RoutingPolicy GetRoutingPolicy()
         {
-            return RoutingPolicy;
+            return this.RoutingPolicy;
         }
 
         public LoggingLevel GetLoggingLevel()
         {
-            return LoggingLevel;
+            return this.LoggingLevel;
         }
 
         public OrderingGuarantee GetOrderingGuarantee()
         {
-            return OrderingGuarantee;
+            return this.OrderingGuarantee;
         }
 
         /// <summary>

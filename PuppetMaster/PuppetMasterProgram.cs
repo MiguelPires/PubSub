@@ -35,7 +35,7 @@ namespace PuppetMaster
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
             IDictionary prop = new Hashtable();
-            int port = UtilityFunctions.GetPort(siteName);
+            int port = Utility.GetPort(siteName);
             prop["port"] = port;
             prop["name"] = siteName;
 
@@ -65,7 +65,7 @@ namespace PuppetMaster
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
             IDictionary prop = new Hashtable();
-            int port = UtilityFunctions.GetPort(siteName);
+            int port = Utility.GetPort(siteName);
             prop["port"] = port;
             prop["name"] = siteName;
 

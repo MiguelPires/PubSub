@@ -40,7 +40,7 @@ namespace PuppetMaster
         protected BasePuppet(string siteName)
         {
             SiteName = siteName;
-            Url = UtilityFunctions.GetUrl(SiteName);
+            Url = Utility.GetUrl(SiteName);
         }
 
         /// <summary>

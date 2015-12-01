@@ -163,7 +163,7 @@ namespace CommonTypes
         /// <returns></returns>
         public List<string> GetBrokers(string puppetMasterUrl)
         {
-            UtilityFunctions.ConnectFunction<List<string>> fun = (string url) =>
+            Utility.ConnectFunction<List<string>> fun = (string url) =>
             {
                 List<string> brokerUrls = null;
 
@@ -175,14 +175,14 @@ namespace CommonTypes
                 return brokerUrls;
             };
 
-            List<string> brokersUrlsResult = UtilityFunctions.TryConnection<List<string>>(fun, puppetMasterUrl);
+            List<string> brokersUrlsResult = Utility.TryConnection<List<string>>(fun, puppetMasterUrl);
             return brokersUrlsResult;
         }
         
         private void ConnectToPuppetMaster(string puppetMasterUrl)
         {
             // connects to the specified site's puppetMaster
-            UtilityFunctions.ConnectFunction<IPuppetMaster> fun = (string url) =>
+            Utility.ConnectFunction<IPuppetMaster> fun = (string url) =>
             {
                 IPuppetMaster puppet = (IPuppetMaster)Activator.GetObject(typeof(IPuppetMaster), url);
                 puppet.Ping();
@@ -190,7 +190,7 @@ namespace CommonTypes
                 return puppet;
             };
 
-            IPuppetMaster puppetMaster = UtilityFunctions.TryConnection<IPuppetMaster>(fun, puppetMasterUrl);
+            IPuppetMaster puppetMaster = Utility.TryConnection<IPuppetMaster>(fun, puppetMasterUrl);
             try
             {
                 PuppetMaster = (IPuppetMasterSlave) puppetMaster;

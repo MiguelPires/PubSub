@@ -35,7 +35,7 @@ namespace Broker
 
             int port;
             string serviceName;
-            if (!UtilityFunctions.DivideUrl(processUrl, out port, out serviceName))
+            if (!Utility.DivideUrl(processUrl, out port, out serviceName))
             {
                 Console.WriteLine("Invalid process URL");
                 Console.ReadLine();

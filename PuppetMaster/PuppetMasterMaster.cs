@@ -1,7 +1,6 @@
 ﻿#region
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
@@ -22,7 +21,6 @@ namespace PuppetMaster
         public List<string[]> BrokersStartup { get; }
         // maps a process to it's site name
         public IDictionary<string, string> SiteProcesses;
-
 
         public PuppetMasterMaster(string siteName) : base(siteName)
         {
@@ -48,18 +46,18 @@ namespace PuppetMaster
                 {
                     if (brokerArgs[0] == siblingArgs[0] && brokerArgs[1] != siblingArgs[1])
                     {
-                        UtilityFunctions.ConnectFunction<Object> fun = (string _) =>
+                        Utility.ConnectFunction<object> fun = (string _) =>
                         {
                             broker.AddSiblingBroker(siblingArgs[1]);
                             return null;
                         };
 
-                        Thread thread = new Thread(() => UtilityFunctions.TryConnection(fun, ""));
+                        Thread thread = new Thread(() => Utility.TryConnection(fun, ""));
                         thread.Start();
                     }
                 }
             }
-            
+
             InitializeLogWriter();
             InitializeCommandSender();
         }
@@ -70,7 +68,6 @@ namespace PuppetMaster
         /// </summary>
         private void InitializeLogWriter()
         {
-            // writes logs in the GUI
             new Thread(() =>
             {
                 Monitor.Enter(this.LogQueue);
@@ -81,15 +78,14 @@ namespace PuppetMaster
                     {
                         this.eventNumber++;
                         Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
-                    }
-                    else
+                    } else
                     {
                         Monitor.Wait(this.LogQueue);
                     }
                 }
             }).Start();
         }
-        
+
         /// <summary>
         ///     Initializes a thread that reads commands from a buffer and sends
         /// them to either local processes or PuppetMasterSlaves
@@ -107,25 +103,51 @@ namespace PuppetMaster
                     {
                         string processName = command[0];
 
+                        if (processName.Equals("Wait"))
+                        {
+                            Monitor.Exit(CommandQueue);
+                            Thread.Sleep(int.Parse(command[1]));
+                            Monitor.Enter(CommandQueue);
+                            continue;
+                        }
+
                         // the status command 
                         if (processName.Equals("all"))
                         {
                             // deliver command to every remote PuppetMaster
                             foreach (IPuppetMasterSlave slave in Slaves.Values)
                             {
-                                slave.DeliverCommand(command);
+                                new Thread(() =>
+                                {
+                                    try
+                                    {
+                                        slave.DeliverCommand(command);
+                                    } catch (Exception ex)
+                                    {
+                                        Utility.DebugLog("WARNING: " + ex.Message);
+                                    }
+                                }).Start();
                             }
 
                             // deliver command to every local process
                             foreach (IProcess proc in LocalProcesses.Values)
                             {
-                                proc.DeliverCommand(new[] {command[1]});
+                                new Thread(() =>
+                                {
+                                    try
+                                    {
+                                        proc.DeliverCommand(new[] {command[1]});
+                                    } catch (Exception ex)
+                                    {
+                                        Utility.DebugLog("WARNING: " + ex.Message);
+                                    }
+                                }).Start();
                             }
                         } else
                         {
                             // find the process's site
                             string site = null;
-                            if (!SiteProcesses.TryGetValue(processName, out site))
+                            if (!this.SiteProcesses.TryGetValue(processName, out site))
                             {
                                 Console.Out.WriteLine("WARNING: The process " + processName + " couldn't be found.");
                                 return;
@@ -137,7 +159,7 @@ namespace PuppetMaster
                                 string[] processArgs = new string[command.Length - 1];
                                 Array.Copy(command, 1, processArgs, 0, command.Length - 1);
                                 IProcess process = LocalProcesses[processName];
-                                
+
                                 try
                                 {
                                     process.DeliverCommand(processArgs);
@@ -181,8 +203,6 @@ namespace PuppetMaster
             this.CommandQueue.Enqueue(puppetArgs);
             Monitor.Pulse(this.CommandQueue);
             Monitor.Exit(this.CommandQueue);
-            
-
         }
 
         /// <summary>
@@ -223,23 +243,30 @@ namespace PuppetMaster
         /// </summary>
         /// <param name="command">The full command line</param>
         /// <param name="args">An output parameter with the arguments to be passed to the process, if any</param>
-        private static void ParseCommand(string command, out string[] args)
+        private void ParseCommand(string command, out string[] args)
         {
             try
             {
+                // clean input
                 string[] tokens = command.Split(' ');
                 for (int i = 0; i < tokens.Length; ++i)
                 {
                     tokens[i] = tokens[i].Trim();
+                }
+                // validate the specified process
+                string site;
+                if (!tokens[0].Equals("Status") && !tokens[0].Equals("Wait") && !this.SiteProcesses.TryGetValue(tokens[1], out site))
+                {
+                    throw new CommandParsingException("WARNING: The process " + tokens[0] + " couldn't be found.");
                 }
 
                 args = new string[5];
                 switch (tokens[0])
                 {
                     case "Subscriber":
-                        if ((!tokens[2].Equals("Subscribe") && !tokens[2].Equals("Unsubscribe")) || 
+                        if ((!tokens[2].Equals("Subscribe") && !tokens[2].Equals("Unsubscribe")) ||
                             tokens.Length != 4)
-                            throw new CommandParsingException("WARNING - Unknown command: "+command);
+                            throw new CommandParsingException("WARNING - Unknown command: " + command);
                         args[0] = tokens[1]; // process name
                         args[1] = tokens[2]; // Subscribe/Unsubsribe
                         args[2] = tokens[3]; // topic
@@ -277,6 +304,16 @@ namespace PuppetMaster
                         args[1] = "Unfreeze";
                         break;
 
+                    case "Wait":
+                        int test;
+                        if (tokens.Length != 2 || !int.TryParse(tokens[1], out test))
+                        {
+                            throw new CommandParsingException("Unknown command: " + command);
+                        }
+                        args[0] = "Wait";
+                        args[1] = tokens[1];
+                        break;
+
                     default:
                         throw new CommandParsingException("WARNING: Unknown command: " + command);
                 }
@@ -293,7 +330,7 @@ namespace PuppetMaster
         private void ParseConfig(string line)
         {
             string[] tokens = line.Split(null);
-            for (int i = 0; i < tokens.Length; ++i) 
+            for (int i = 0; i < tokens.Length; ++i)
             {
                 tokens[i] = tokens[i].Trim();
             }
@@ -301,20 +338,16 @@ namespace PuppetMaster
             if (tokens[0].Equals("Process"))
             {
                 ParseProcess(tokens);
-            }
-            else if (tokens[0].Equals("Site"))
+            } else if (tokens[0].Equals("Site"))
             {
                 ParseSite(tokens);
-            }
-            else if (tokens[0].Equals("Ordering"))
+            } else if (tokens[0].Equals("Ordering"))
             {
                 ParseOrdering(tokens);
-            }
-            else if (tokens[0].Equals("RoutingPolicy"))
+            } else if (tokens[0].Equals("RoutingPolicy"))
             {
                 ParseRouting(tokens);
-            }
-            else if (tokens[0].Equals("LoggingLevel"))
+            } else if (tokens[0].Equals("LoggingLevel"))
             {
                 ParseLogging(tokens);
             }
@@ -350,8 +383,7 @@ namespace PuppetMaster
             {
                 IPuppetMasterSlave slave = Slaves[siteName];
                 slave.LaunchProcess(processName, processType, processUrl);
-            }
-            catch (KeyNotFoundException)
+            } catch (KeyNotFoundException)
             {
                 Console.WriteLine("WARNING: Config wasn't delivered to the site '" + siteName + "'");
             }
@@ -375,15 +407,18 @@ namespace PuppetMaster
             switch (tokens[1])
             {
                 case "NO":
+                case "No":
                     this.OrderingGuarantee = OrderingGuarantee.No;
                     break;
 
                 case "FIFO":
+                case "Fifo":
                     this.OrderingGuarantee = OrderingGuarantee.Fifo;
                     break;
 
                 case "TOTAL":
-                    this.OrderingGuarantee = OrderingGuarantee.Total;
+                case "Total":
+                    this.OrderingGuarantee = OrderingGuarantee.Fifo;
                     break;
 
                 default:
@@ -396,6 +431,7 @@ namespace PuppetMaster
         {
             switch (tokens[1])
             {
+                case "flood":
                 case "flooding":
                     this.RoutingPolicy = RoutingPolicy.Flood;
                     break;
@@ -415,10 +451,12 @@ namespace PuppetMaster
         {
             switch (tokens[1])
             {
+                case "Full":
                 case "full":
                     this.LoggingLevel = LoggingLevel.Full;
                     break;
 
+                case "Light":
                 case "light":
                     this.LoggingLevel = LoggingLevel.Light;
                     break;
@@ -437,13 +475,13 @@ namespace PuppetMaster
         /// <returns> A puppetMaster instance or null if the site is down </returns>
         private IPuppetMasterSlave ConnectToSite(string name, string siteParent)
         {
-            string siteUrl = "tcp://localhost:" + UtilityFunctions.GetPort(name) + "/" + name;
+            string siteUrl = "tcp://localhost:" + Utility.GetPort(name) + "/" + name;
 
             try
             {
                 Console.WriteLine("Connecting to " + siteUrl);
 
-                UtilityFunctions.ConnectFunction<IPuppetMasterSlave> fun = (string urlToConnect) =>
+                Utility.ConnectFunction<IPuppetMasterSlave> fun = (string urlToConnect) =>
                 {
                     IPuppetMasterSlave puppetMasterSlave =
                         (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), urlToConnect);
@@ -468,17 +506,15 @@ namespace PuppetMaster
                     return puppetMasterSlave;
                 };
 
-                var slave = UtilityFunctions.TryConnection(fun, siteUrl);
+                var slave = Utility.TryConnection(fun, siteUrl);
                 Slaves.Add(name, slave);
 
                 return slave;
-            }
-            catch (SocketException)
+            } catch (SocketException)
             {
                 Console.WriteLine(@"Couldn't connect to " + siteUrl);
                 return null;
-            }
-            catch (ArgumentException)
+            } catch (ArgumentException)
             {
                 Console.WriteLine(@"The slave at " + name + @" already exists");
                 return null;

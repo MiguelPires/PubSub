@@ -1,9 +1,11 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace Broker
 {
+    [Serializable]
     public class MessageQueue
     {
         private readonly IDictionary<int, string[]> _messages = new ConcurrentDictionary<int, string[]>();

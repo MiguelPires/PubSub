@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
@@ -31,19 +32,21 @@ namespace Broker
             new ConcurrentDictionary<string, SubscriptionSet>();
 
         // sequence numbers sent by other processes
-        public IDictionary<string, int> InSequenceNumbers { get; } = new ConcurrentDictionary<string, int>();
+        public IDictionary<string, int> InSequenceNumbers { get; set; } = new ConcurrentDictionary<string, int>();
         // sequence numbers sent to other processes - example: int seq = OutSeq [proc][site] 
-        public IDictionary<string, IDictionary<string, int>> OutSequenceNumbers { get; } =
+        public IDictionary<string, IDictionary<string, int>> OutSequenceNumbers { get; set; } =
             new ConcurrentDictionary<string, IDictionary<string, int>>();
 
         // hold-back queue used for storing delayed messages
-        public IDictionary<string, MessageQueue> HoldbackQueue { get; } =
+        public IDictionary<string, MessageQueue> HoldbackQueue { get; set; } =
             new ConcurrentDictionary<string, MessageQueue>();
 
         // the prevents sending the same message multiple times by the same process
         public IDictionary<string, object> ProcessLocks { get; } = new ConcurrentDictionary<string, object>();
         // history of messages sent by publishers to each site
         public MessageHistory History { get; } = new MessageHistory();
+        //
+        public object Subscribing = new object();
 
         public Broker(string name, string url, string puppetMasterUrl, string siteName, string parentSite)
             : base(name, url, puppetMasterUrl, siteName)
@@ -54,13 +57,13 @@ namespace Broker
                 return;
 
             // obtain the parent site's brokers urls
-            string parentUrl = UtilityFunctions.GetUrl(parentSite);
+            string parentUrl = Utility.GetUrl(parentSite);
             List<string> brokerUrls = GetBrokers(parentUrl);
 
             // connect to the brokers at the parent site
             foreach (string brokerUrl in brokerUrls)
             {
-                UtilityFunctions.ConnectFunction<IBroker> fun = (string urlToConnect) =>
+                Utility.ConnectFunction<IBroker> fun = (string urlToConnect) =>
                 {
                     IBroker parentBroker = (IBroker) Activator.GetObject(typeof (IBroker), urlToConnect);
                     parentBroker.RegisterBroker(SiteName, Url);
@@ -68,7 +71,7 @@ namespace Broker
                     return parentBroker;
                 };
 
-                IBroker parBroker = UtilityFunctions.TryConnection(fun, brokerUrl);
+                IBroker parBroker = Utility.TryConnection(fun, brokerUrl);
                 ParentBrokers.Add(parBroker);
             }
         }
@@ -101,7 +104,7 @@ namespace Broker
         public void RegisterPubSub(string procName, string procUrl)
         {
             if (LocalProcesses.ContainsKey(procName))
-                Console.WriteLine("There already is a subscriber named " + procName + " at this broker (replaced anyway)");
+                Utility.DebugLog("There already is a subscriber named " + procName + " at this broker (replaced anyway)");
 
             LocalProcesses[procName] = (IProcess) Activator.GetObject(typeof (IProcess), procUrl);
         }
@@ -138,12 +141,7 @@ namespace Broker
                             {
                                 try
                                 {
-                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
-                                        ProcessName);
-                                    // TODO: for testing purposes only!!
-                                    // hangs the process that should deliver the publication
-                                    /* if (ProcessName.Equals("broker3"))
-                                            Process.GetCurrentProcess().Kill();*/
+                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber, ProcessName);
                                 } catch (RemotingException)
                                 {
                                 } catch (SocketException)
@@ -157,6 +155,17 @@ namespace Broker
                 ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, ProcessName);
         }
 
+        /// <summary>
+        ///     Delivers the publication (either updates the state or actually processes the
+        ///  publication) and multicasts it. 
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="topic"></param>
+        /// <param name="publication"></param>
+        /// <param name="fromSite"></param>
+        /// <param name="sequenceNumber"></param>
+        /// <param name="deliverProcess"> The deliverProcess is used to inform everyone about 
+        /// which process processes the publication (it's the one that received it) </param>
         public void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber,
             string deliverProcess)
         {
@@ -169,47 +178,57 @@ namespace Broker
 
             lock (ProcessLocks[publisher])
             {
-                // check if the publication was already delivered
-                int lastNumber;
-                if (InSequenceNumbers.TryGetValue(publisher, out lastNumber) && lastNumber >= sequenceNumber)
-                    return;
-
-                MessageQueue queue;
-                if (HoldbackQueue.TryGetValue(publisher, out queue))
+                lock (Subscribing)
                 {
-                    if (queue.GetSequenceNumbers().Contains(sequenceNumber))
-                        return;
-                }
-
-                if (deliverProcess.Equals(ProcessName))
-                {
-                    Console.Out.WriteLine("PROCESS - " + sequenceNumber);
-                    ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
-                } else
-                {
-                    // stores the publication for the appropriate processes
-                    StorePublicationInHistory(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
-                }
-
-                lock (SiblingBrokers)
-                {
-                    // multicast the publication
-                    foreach (var broker in SiblingBrokers)
+                    // check if the publication was already delivered
+                    int lastNumber;
+                    if (InSequenceNumbers.TryGetValue(publisher, out lastNumber) && lastNumber >= sequenceNumber)
                     {
-                        Thread thread =
-                            new Thread(() =>
-                            {
-                                try
+                        return;
+                    }
+
+                    // TODO: refactor this as in the InformOfSubscription
+                    MessageQueue queue;
+                    if (HoldbackQueue.TryGetValue(publisher, out queue))
+                    {
+                        if (queue.GetSequenceNumbers().Contains(sequenceNumber))
+                            return;
+                    }
+
+                    if (deliverProcess.Equals(ProcessName))
+                    {
+                        Console.Out.WriteLine("PROCESS - " + sequenceNumber);
+                        ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
+                    }
+                    else
+                    {
+                        // stores the publication for the appropriate processes
+                        StorePublicationInHistory(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
+                    }
+
+                    // TODO: remover este lock
+                    lock (SiblingBrokers)
+                    {
+                        // multicast the publication
+                        foreach (var broker in SiblingBrokers)
+                        {
+                            Thread thread =
+                                new Thread(() =>
                                 {
-                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
-                                        deliverProcess);
-                                } catch (RemotingException)
-                                {
-                                } catch (SocketException)
-                                {
-                                }
-                            });
-                        thread.Start();
+                                    try
+                                    {
+                                        broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
+                                            deliverProcess);
+                                    }
+                                    catch (RemotingException)
+                                    {
+                                    }
+                                    catch (SocketException)
+                                    {
+                                    }
+                                });
+                            thread.Start();
+                        }
                     }
                 }
             }
@@ -238,7 +257,7 @@ namespace Broker
                 if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber != lastNumber + 1)
                     return;
 
-                Console.Out.WriteLine("Update pub'" + publication + "' seq " + sequenceNumber);
+                Utility.DebugLog("Update pub '" + publication + "' seq " + sequenceNumber);
                 InSequenceNumbers[publisher] = sequenceNumber;
 
                 // to be stored later 
@@ -386,7 +405,7 @@ namespace Broker
                         }
                     }
                 }
-                PublicationProcessed(publisher, sequenceNumber);
+                PublicationProcessed(publisher, fromSite, sequenceNumber);
             }
         }
 
@@ -416,10 +435,8 @@ namespace Broker
                 // to be stored later 
                 string[] messageToStore = {publisher, topic, publication, fromSite, ""};
 
-                Console.Out.WriteLine("Receiving publication " + publication + " from " + publisher + " with seq " +
-                                      sequenceNumber);
-
-                // TODO: refactorizar este metodo !!!
+                Utility.DebugLog("Receiving publication " + publication + " from " + publisher + " with seq " +
+                                 sequenceNumber);
 
                 IDictionary<string, string> matchList = GetTopicMatchList(topic);
 
@@ -450,18 +467,20 @@ namespace Broker
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(SiteName, messageToStore);
 
-                            Console.Out.WriteLine("Sending publication '" + publication + "' to " + match.Key +
-                                                  " with seq " +
-                                                  seqNum);
+                            Utility.DebugLog("Sending publication '" + publication + "' to " + match.Key +
+                                             " with seq " +
+                                             seqNum);
 
                             ISubscriber subscriber = (ISubscriber) proc;
 
+                            // modified closure
+                            int s1 = seqNum;
                             Thread thread =
                                 new Thread(() =>
                                 {
                                     try
                                     {
-                                        subscriber.DeliverPublication(publisher, topic, publication, seqNum);
+                                        subscriber.DeliverPublication(publisher, topic, publication, s1);
                                     } catch (RemotingException)
                                     {
                                     } catch (SocketException)
@@ -500,15 +519,15 @@ namespace Broker
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(child.Key, messageToStore);
 
+                            Utility.DebugLog("Sending pub " + publication + " to site " + child.Key + " with seq " + seqNum);
+
                             // send log
                             if (this.LoggingLevel == LoggingLevel.Full)
                             {
-                                Thread logThread =
-                                    new Thread(
-                                        () =>
-                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                logThread.Start();
+                                new Thread(
+                                    () =>
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                topic)).Start();
                             }
                             Thread thread = new Thread(() =>
                             {
@@ -561,15 +580,13 @@ namespace Broker
                         // store the publication
                         messageToStore[4] = seqNum.ToString();
                         History.StorePublication(ParentSite, messageToStore);
-
+                        Utility.DebugLog("Sending pub " + publication + " to site " + ParentSite + " with seq " + seqNum);
 
                         if (this.LoggingLevel == LoggingLevel.Full)
                         {
-                            Thread logThread =
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic));
-                            logThread.Start();
+                            new Thread(
+                                () =>
+                                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic)).Start();
                         }
 
                         Thread thread = new Thread(() =>
@@ -608,12 +625,12 @@ namespace Broker
                 } else if (matchList != null)
                 {
                     // if there are subscriptions to the topic, send to the appropriate sites
-                    List<string> SentSites = new List<string>();
+                    List<string> sentSites = new List<string>();
 
                     foreach (KeyValuePair<string, string> match in matchList)
                     {
                         // we don't want to sent multiple messages to the same site
-                        if (SentSites.Contains(match.Value))
+                        if (sentSites.Contains(match.Value))
                             continue;
 
                         // don't send publication to where it came from
@@ -623,7 +640,7 @@ namespace Broker
                         List<IBroker> brokers;
                         if (Children.TryGetValue(match.Value, out brokers))
                         {
-                            SentSites.Add(match.Value);
+                            sentSites.Add(match.Value);
 
                             // determine the correct sequence number
                             IDictionary<string, int> siteToSeqNum;
@@ -643,19 +660,17 @@ namespace Broker
                             messageToStore[4] = seqNum.ToString();
                             History.StorePublication(match.Value, messageToStore);
 
-                            Console.Out.WriteLine("Sending pub " + publication + " to site " + match.Value +
-                                                  " with seq " +
-                                                  seqNum);
+                            Utility.DebugLog("Sending pub " + publication + " to site " + match.Value +
+                                             " with seq " +
+                                             seqNum);
 
                             // send log
                             if (this.LoggingLevel == LoggingLevel.Full)
                             {
-                                Thread logThread =
                                     new Thread(
                                         () =>
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                logThread.Start();
+                                                                    topic)).Start();
                             }
 
                             Thread thread = new Thread(() =>
@@ -713,12 +728,10 @@ namespace Broker
                             // send log
                             if (this.LoggingLevel == LoggingLevel.Full)
                             {
-                                Thread logThread =
                                     new Thread(
                                         () =>
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                    topic));
-                                logThread.Start();
+                                                                    topic)).Start();
                             }
 
                             Thread thread = new Thread(() =>
@@ -753,33 +766,28 @@ namespace Broker
                             });
 
                             thread.Start();
-                            SentSites.Add(match.Value);
+                            sentSites.Add(match.Value);
                         }
                     }
                 }
-                PublicationProcessed(publisher, sequenceNumber);
+                PublicationProcessed(publisher, fromSite, sequenceNumber);
             }
         }
 
         /// <summary>
         ///     Decides what to do with the publication.
         /// </summary>
-        /// <param name="publisher"></param>
-        /// <param name="topic"></param>
-        /// <param name="publication"></param>
-        /// <param name="sequenceNumber"></param>
         /// <returns> Returns true if the message should be further subscriber, false otherwise </returns>
         private bool PublicationReceived(string publisher, string topic, string publication, string fromSite,
             int sequenceNumber, string deliverProcess)
         {
-            string[] eventMessage = new string[7];
-            eventMessage[0] = "DeliverPublication";
-            eventMessage[1] = publisher;
-            eventMessage[2] = topic;
-            eventMessage[3] = publication;
-            eventMessage[4] = fromSite;
-            eventMessage[5] = sequenceNumber.ToString();
-            eventMessage[6] = deliverProcess;
+            string[] blockedMessage = new string[6];
+            blockedMessage[0] = publisher;
+            blockedMessage[1] = topic;
+            blockedMessage[2] = publication;
+            blockedMessage[3] = fromSite;
+            blockedMessage[4] = sequenceNumber.ToString();
+            blockedMessage[5] = deliverProcess;
 
             // creates a subscriber lock if needed
             object procLock;
@@ -790,11 +798,9 @@ namespace Broker
 
             lock (ProcessLocks[publisher])
             {
-                //lock (HoldbackQueue)
-                //{
                 if (Status.Equals(Status.Frozen))
                 {
-                    FrozenMessages.Add(eventMessage);
+                    FrozenMessages.Add(blockedMessage);
                     return false;
                 }
 
@@ -802,7 +808,14 @@ namespace Broker
                 if (!InSequenceNumbers.TryGetValue(publisher, out lastNumber))
                     lastNumber = 0;
 
-                if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
+                // if we received the publication from the broker we ignore it's sequence number
+                // and process it immediately.
+                /* if (OrderingGuarantee == OrderingGuarantee.No && fromSite.Equals(SiteName))
+                    return true;*/
+
+                // if we're using FIFO or we're receiving from another broker, then we need to
+                // deliver in order (fault tolerance)
+                if (sequenceNumber > lastNumber + 1)
                 {
                     MessageQueue queue;
                     if (HoldbackQueue.TryGetValue(publisher, out queue))
@@ -811,20 +824,19 @@ namespace Broker
                         {
                             return false;
                         }
-                        queue.Add(eventMessage, sequenceNumber);
+                        queue.Add(blockedMessage, sequenceNumber);
                     } else
                     {
                         queue = new MessageQueue();
-                        queue.Add(eventMessage, sequenceNumber);
+                        queue.Add(blockedMessage, sequenceNumber);
                         HoldbackQueue[publisher] = queue;
                     }
 
-                    Console.Out.WriteLine("Delayed message detected. Queueing message '" + publication +
-                                          "' with seqNo " + sequenceNumber);
+                    Utility.DebugLog("Delayed message detected. Queueing message '" + publication +
+                                     "' with seqNo " + sequenceNumber);
                     new Thread(() =>
                     {
-                        bool retry = true;
-                        while (retry)
+                        while (true)
                         {
                             // waits half a second before checking the queue.  if the minimum sequence
                             // number is this one, then our message didn't arrive and it's the one blocking 
@@ -839,10 +851,10 @@ namespace Broker
                                     int minSeqNo = checkQueue.GetSequenceNumbers().Min();
                                     if (minSeqNo == sequenceNumber)
                                     {
-                                        Request(publisher, fromSite, sequenceNumber);
+                                        RequestPublication(publisher, fromSite, sequenceNumber - 1);
                                         return;
                                     }
-                                    // if the minimum sequence number is smaller than ours 
+                                    // ifD the minimum sequence number is smaller than ours 
                                     // we wait and repeat
                                     if (minSeqNo < sequenceNumber)
                                         continue;
@@ -855,22 +867,30 @@ namespace Broker
                     }).Start();
 
                     return false;
-                }
+                } else if (sequenceNumber <= lastNumber)
+                    return false;
             }
             return true;
         }
 
-        private void Request(string publisher, string fromSite, int sequenceNumber)
+        /// <summary>
+        ///     Local function that requests a resend of a publication from a publisher
+        /// or a broker
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="fromSite"></param>
+        /// <param name="sequenceNumber"></param>
+        private void RequestPublication(string publisher, string fromSite, int sequenceNumber)
         {
             List<IBroker> brokers = null;
 
             IProcess proc;
             if (fromSite.Equals(SiteName) && LocalProcesses.TryGetValue(publisher, out proc))
             {
-                Console.Out.WriteLine("Requesting resend from local publisher");
+                Utility.DebugLog("Requesting resend of pub " + sequenceNumber + " from local publisher");
 
                 IPublisher pub = (IPublisher) proc;
-                new Thread(() => pub.RequestPublication(sequenceNumber - 1)).Start();
+                new Thread(() => pub.RequestPublication(sequenceNumber)).Start();
                 return;
             }
 
@@ -880,56 +900,52 @@ namespace Broker
                 brokers = ParentBrokers;
             else
             {
-                Console.Out.WriteLine("WARNING: The requesting site couldn't be found.");
+                Utility.DebugLog("WARNING: The requesting site '"+fromSite+"' couldn't be found.");
                 return;
             }
 
-            Console.Out.WriteLine("Requesting resend from remote broker");
-            Thread thread =
-                new Thread(() =>
-                {
-                    bool retry = true;
-                    while (retry)
-                    {
-                        IBroker broker;
-                        lock (brokers)
-                        {
-                            // picks a random broker for load-balancing purposes
-                            int brokerIndex = this.Random.Next(0, brokers.Count);
-                            broker = brokers[brokerIndex];
-                        }
+            Utility.DebugLog("Requesting resend of pub " + sequenceNumber + " from remote broker");
 
-                        Thread subThread =
-                            new Thread(() =>
-                            {
-                                try
-                                {
-                                    broker.RequestPublication(publisher, SiteName, sequenceNumber - 1);
-                                    retry = false;
-                                } catch (RemotingException)
-                                {
-                                } catch (SocketException)
-                                {
-                                }
-                            });
-                        subThread.Start();
-                        subThread.Join();
+            new Thread(() =>
+            {
+                bool retry = true;
+                while (retry)
+                {
+                    IBroker broker;
+                    lock (brokers)
+                    {
+                        // picks a random broker for load-balancing purposes
+                        int brokerIndex = this.Random.Next(0, brokers.Count);
+                        broker = brokers[brokerIndex];
                     }
-                });
-            thread.Start();
+
+                    Thread subThread =
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                broker.ResendPublication(publisher, SiteName, sequenceNumber);
+                                retry = false;
+                            } catch (RemotingException)
+                            {
+                            } catch (SocketException)
+                            {
+                            }
+                        });
+                    subThread.Start();
+                    subThread.Join();
+                }
+            }).Start();
         }
 
         /// <summary>
         ///     Updates this broker's state. Updates sequence numbers, unblocks delayed messages (if any), etc
         /// </summary>
         /// <param name="topic"> The subscribed topic </param>
-        /// <param name="process"> The publisher </param>
+        /// <param name="process"> The subscriber </param>
         /// <param name="sequenceNumber"> The message's sequence number </param>
-        private void PublicationProcessed(string publisher, int sequenceNumber)
+        private void PublicationProcessed(string publisher, string fromSite, int sequenceNumber)
         {
-            if (this.OrderingGuarantee != OrderingGuarantee.Fifo)
-                return;
-
             // creates a subscriber lock if needed
             object procLock;
             if (!ProcessLocks.TryGetValue(publisher, out procLock))
@@ -939,9 +955,16 @@ namespace Broker
 
             lock (ProcessLocks[publisher])
             {
-                //lock (HoldbackQueue)
-                //{
+                // if we don't care about ordering and we receive directly from a broker
+                // then we just assign it a seq no and stop because there won't be any delayed messages
+                /*    if (OrderingGuarantee == OrderingGuarantee.No && fromSite.Equals(SiteName))
+                {
+                    ++InSequenceNumbers[publisher];
+                    return;
+                }*/
+
                 InSequenceNumbers[publisher] = sequenceNumber;
+
                 MessageQueue queue;
                 if (HoldbackQueue.TryGetValue(publisher, out queue))
                 {
@@ -950,18 +973,26 @@ namespace Broker
                     {
                         return;
                     }
-                    Console.Out.WriteLine("Unblocking message with sequence number: " + (sequenceNumber + 1));
 
-                    if (message[6].Equals(ProcessName))
-                        ProcessPublication(message[1], message[2], message[3], message[4], int.Parse(message[5]), message[6]);
+                    Utility.DebugLog("Unblocking message with sequence number: " + (sequenceNumber + 1));
+
+                    if (message[5].Equals(ProcessName))
+                        ProcessPublication(message[0], message[1], message[2], message[3], int.Parse(message[4]), message[5]);
                     else
-                        StorePublicationInHistory(message[1], message[2], message[3], message[4], int.Parse(message[5]),
-                            message[6]);
+                        StorePublicationInHistory(message[0], message[1], message[2], message[3], int.Parse(message[4]),
+                            message[5]);
                 }
             }
         }
 
-        public void RequestPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber=null)
+        /// <summary>
+        ///     Request a resend for a specific publication. Can be called by a broker or a subscriber
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="requestingSite"></param>
+        /// <param name="sequenceNumber"></param>
+        /// <param name="subscriber"></param>
+        public void ResendPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber = null)
         {
             lock (ProcessLocks[publisher])
             {
@@ -969,9 +1000,10 @@ namespace Broker
 
                 if (message == null)
                 {
-                    Console.Out.WriteLine("No pub stored for " + publisher + " with seq no " + sequenceNumber);
+                    Utility.DebugLog("No pub stored for " + publisher + " with seq no " + sequenceNumber);
                     return;
                 }
+                Utility.DebugLog("Resending message " + message[2] + " with seq no " + int.Parse(message[4]));
 
                 Thread thread;
                 // in this case, a subscriber requested a resend
@@ -985,23 +1017,20 @@ namespace Broker
                     } else
                         return;
 
-                    thread = new Thread(() => {
-                     try
-                     {
-                         sub.DeliverPublication(message[0], message[1], message[2], int.Parse(message[4]));
-                     }
-                     catch (RemotingException)
-                     {
-                     }
-                     catch (SocketException)
-                     {
-                     }
-                     
-                 });
+                    thread = new Thread(() =>
+                    {
+                        try
+                        {
+                            sub.DeliverPublication(message[0], message[1], message[2], int.Parse(message[4]));
+                        } catch (RemotingException)
+                        {
+                        } catch (SocketException)
+                        {
+                        }
+                    });
                     thread.Start();
                     return;
                 }
-                    
 
                 List<IBroker> brokers;
 
@@ -1010,7 +1039,7 @@ namespace Broker
 
                 else if (!Children.TryGetValue(requestingSite, out brokers))
                 {
-                    Console.Out.WriteLine("WARNING: The requesting site '" + requestingSite + "' couldn't be found.");
+                    Utility.DebugLog("WARNING: The requesting site '" + requestingSite + "' couldn't be found.");
                     return;
                 }
 
@@ -1021,12 +1050,12 @@ namespace Broker
                     /*thread =
                         new Thread(
                             () =>
-                                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " +
                                                         message[1]));
                     thread.Start();*/
                 }
 
-                Console.Out.WriteLine("Resending pub to " + requestingSite);
+                Utility.DebugLog("Resending pub to " + requestingSite);
                 thread =
                     new Thread(() =>
                     {
@@ -1063,13 +1092,235 @@ namespace Broker
             }
         }
 
+        /// <summary>
+        ///     Notifies the broker of the last sequence number received. If a missing message is detected then
+        /// it is retransmitted. After that it's sent back up to the publisher for further checking
+        /// </summary>
+        public void NotifyOfLast(string publisher, string askingSite, int sequenceNumber, string subscriber = null)
+        {
+            IDictionary<string, int> seqNoTable;
+            if (OutSequenceNumbers.TryGetValue(publisher, out seqNoTable))
+            {
+                int lastSeqNo;
+                if (seqNoTable.TryGetValue(askingSite, out lastSeqNo) && lastSeqNo > sequenceNumber)
+                {
+                    for (int i = sequenceNumber + 1; i <= lastSeqNo; i++)
+                    {
+                        string[] message = History.GetPublication(askingSite, publisher, i);
+
+                        if (message == null)
+                        {
+                            Utility.DebugLog("No message in history for notif");
+                            return;
+                        }
+                        // the variable is modified so we must keep it local
+                        int i1 = i;
+
+                        Utility.DebugLog("Resending message " + message[2] + " with seq no " + i1 + " after notif");
+
+                        IProcess proc;
+                        if (subscriber != null && LocalProcesses.TryGetValue(subscriber, out proc))
+                        {
+                            // TODO: refactor this to use the SendPublication
+                            ISubscriber subProc = (ISubscriber) proc;
+                            new Thread(() => subProc.DeliverPublication(message[0], message[1], message[2], i1)).Start();
+                        } else if (askingSite.Equals(ParentSite))
+                        {
+                            new Thread(() =>
+                            {
+                                bool retry = true;
+                                while (retry)
+                                {
+                                    IBroker parentBroker;
+                                    lock (ParentBrokers)
+                                    {
+                                        // picks a random broker for load-balancing purposes
+                                        int childIndex = this.Random.Next(0, ParentBrokers.Count);
+                                        parentBroker = ParentBrokers[childIndex];
+                                    }
+
+                                    Thread subThread =
+                                        new Thread(() =>
+                                        {
+                                            try
+                                            {
+                                                parentBroker.DeliverPublication(message[0], message[1], message[2], message[3],
+                                                    i1);
+                                                retry = false;
+                                            } catch (RemotingException)
+                                            {
+                                            } catch (SocketException)
+                                            {
+                                            }
+                                        });
+                                    subThread.Start();
+                                    subThread.Join();
+                                }
+                            }).Start();
+                        }
+                        List<IBroker> childList;
+                        if (Children.TryGetValue(askingSite, out childList))
+                        {
+                            if (this.LoggingLevel == LoggingLevel.Full)
+                            {
+                                new Thread(
+                                    () =>
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + message[1])).Start();
+                            }
+
+                            new Thread(() =>
+                            {
+                                bool retry = true;
+                                while (retry)
+                                {
+                                    IBroker childBroker;
+                                    lock (childList)
+                                    {
+                                        // picks a random broker for load-balancing purposes
+                                        int childIndex = this.Random.Next(0, childList.Count);
+                                        childBroker = childList[childIndex];
+                                    }
+
+                                    Thread subThread =
+                                        new Thread(() =>
+                                        {
+                                            try
+                                            {
+                                                childBroker.DeliverPublication(message[0], message[1], message[2], message[3],
+                                                    i1);
+                                                retry = false;
+                                            } catch (RemotingException)
+                                            {
+                                            } catch (SocketException)
+                                            {
+                                            }
+                                        });
+                                    subThread.Start();
+                                    subThread.Join();
+                                }
+                            }).Start();
+                        }
+                    }
+                    // we updated the broker/subscriber until the lastSeqNo
+                    sequenceNumber = lastSeqNo;
+                } else
+                {
+                    Utility.DebugLog("Received up to date notif of " + sequenceNumber);
+                }
+
+                string[] messageInfo = History.GetPublication(askingSite, publisher, sequenceNumber);
+                if (messageInfo == null)
+                    return;
+
+                string fromSite = messageInfo[3];
+
+                Utility.DebugLog("Sending up the chain");
+
+                // TODO: when the notif arrives at site0 it somehow goes unnoticed
+                // check for lost messages up the chain 
+                if (fromSite.Equals(SiteName))
+                {
+
+                    int outSeqNo, intSeqNo, diff;
+                    IDictionary<string, int> siteToSeqNo;
+                    if (OutSequenceNumbers.TryGetValue(publisher, out siteToSeqNo) &&
+                        siteToSeqNo.TryGetValue(askingSite, out outSeqNo) &&
+                        InSequenceNumbers.TryGetValue(publisher, out intSeqNo))
+                    {
+                        diff = intSeqNo - outSeqNo;
+                        if (diff < 0)
+                            return;
+                    }
+                    else
+                    {
+                        return;
+                    }
+
+                    Utility.DebugLog("Asking publisher about "+(sequenceNumber+diff));
+
+                    // Notify publisher directly
+                    IProcess proc;
+                    if (LocalProcesses.TryGetValue(publisher, out proc))
+                    {
+                        IPublisher pub = (IPublisher) proc;
+
+                        Thread pubThread = new Thread(() =>
+                        {
+                            bool retry = true;
+                            while (retry)
+                            {
+                                Thread subThread =
+                                    new Thread(() =>
+                                    {
+                                        try
+                                        {
+                                            pub.NotifyOfLast(publisher, SiteName, sequenceNumber + diff);
+                                            retry = false;
+                                        } catch (RemotingException)
+                                        {
+                                        } catch (SocketException)
+                                        {
+                                        }
+                                    });
+                                subThread.Start();
+                                subThread.Join();
+                            }
+                        });
+
+                        pubThread.Start();
+                    }
+                } else
+                {
+                    List<IBroker> brokerList = null;
+                    Utility.DebugLog("Notif: Site is " + fromSite);
+                    if (ParentSite.Equals(fromSite))
+                    {
+                        Utility.DebugLog("ASK PARENT");
+                        lock (ParentBrokers)
+                        {
+                            brokerList = ParentBrokers;
+                        }
+                    } else
+                    {
+                        Utility.DebugLog("ASK CHILD");
+
+                        if (!Children.TryGetValue(fromSite, out brokerList))
+                            return;
+                    }
+
+                    new Thread(() =>
+                    {
+                        bool retry = true;
+                        while (retry)
+                        {
+                            Thread subThread =
+                                new Thread(() =>
+                                {
+                                    try
+                                    {
+                                        brokerList[this.Random.Next(0, brokerList.Count)].NotifyOfLast(publisher, SiteName, sequenceNumber);
+                                        retry = false;
+                                    } catch (RemotingException)
+                                    {
+                                    } catch (SocketException)
+                                    {
+                                    }
+                                });
+                            subThread.Start();
+                            subThread.Join();
+                        }
+                    }).Start();
+                }
+            }
+        }
+
         //************************************************
         //
         //          Subscription Methods
         //
         //************************************************
 
-        public void DeliverSubscription(string subscriber, string topic, string siteName)
+        public void DeliverSubscription(string subscriber, string topic, string siteName, int sequenceNumber)
         {
             lock (this)
             {
@@ -1080,12 +1331,8 @@ namespace Broker
                 }
             }
 
-            lock (ProcessLocks[subscriber])
+            lock (Subscribing)
             {
-                Console.Out.WriteLine("Deliver sub");
-
-                lock (SiblingBrokers)
-                {
                     // if we're using more than one broker
                     if (SiblingBrokers.Count != 0)
                     {
@@ -1096,7 +1343,7 @@ namespace Broker
                                 {
                                     try
                                     {
-                                        broker.InformOfSubscription(subscriber, topic, siteName);
+                                        broker.InformOfSubscription(subscriber, topic, siteName, sequenceNumber, ProcessName, InSequenceNumbers, HoldbackQueue, OutSequenceNumbers);
                                     } catch (RemotingException)
                                     {
                                     } catch (SocketException)
@@ -1107,33 +1354,33 @@ namespace Broker
                         }
                     } else
                     {
-                        ProcessSubscription(subscriber, topic, siteName);
-                        // test only
-                        /*if (ProcessName.Equals("broker3"))
-                            Process.GetCurrentProcess().Kill();*/
+                        ProcessSubscription(subscriber, topic, siteName, sequenceNumber, ProcessName);
                     }
                 }
-            }
         }
 
-        public void InformOfSubscription(string subscriber, string topic, string siteName)
+        public void InformOfSubscription(string subscriber, string topic, string siteName, int sequenceNumber,
+            string deliverProcess, IDictionary<string, int> state, IDictionary<string, MessageQueue> queue, IDictionary<string, IDictionary<string, int>> outSeqs)
         {
-            // creates a subscriber lock if needed
-            object procLock;
-            if (!ProcessLocks.TryGetValue(subscriber, out procLock))
+            lock (Subscribing)
             {
-                ProcessLocks[subscriber] = new object();
-            }
+                InSequenceNumbers = state;
+                HoldbackQueue = queue;
+                OutSequenceNumbers = outSeqs;
 
-            lock (ProcessLocks[subscriber])
-            {
-                Console.Out.WriteLine("Inform");
-                // the subscription is already registered
-                SubscriptionSet set;
-                if (RoutingTable.TryGetValue(topic, out set) && set.Processes.ContainsKey(subscriber))
+                // TODO: remove this to enable the load balancing for subs
+               // deliverProcess = ProcessName;
+                if (deliverProcess.Equals(ProcessName))
                 {
-                    Console.Out.WriteLine("ALREADY SUBBED - " + subscriber);
-                    return;
+                    // if the subscription was already processed, we don't multicast it
+                    if (!ProcessSubscription(subscriber, topic, siteName, sequenceNumber, deliverProcess))
+                        return;
+                }
+                else
+                {
+                    // if the subscription was already added, we don't multicast it
+                    if (!StoreSubscription(subscriber, topic, siteName, sequenceNumber, deliverProcess))
+                        return;
                 }
 
                 lock (SiblingBrokers)
@@ -1146,23 +1393,71 @@ namespace Broker
                             {
                                 try
                                 {
-                                    broker.InformOfSubscription(subscriber, topic, siteName);
-                                } catch (RemotingException)
+                                    broker.InformOfSubscription(subscriber, topic, siteName, sequenceNumber, deliverProcess, state, queue, outSeqs);
+                                }
+                                catch (RemotingException)
                                 {
-                                } catch (SocketException)
+                                }
+                                catch (SocketException)
                                 {
                                 }
                             });
                         thread.Start();
                     }
                 }
+           }
+            
+        }
 
-                // and deliver it
-                ProcessSubscription(subscriber, topic, siteName);
+        private void SubscriptionProcessed(string subscriber, int sequenceNumber)
+        {
+            if (this.OrderingGuarantee != OrderingGuarantee.Fifo)
+                return;
+
+            // creates a subscriber lock if needed
+            object procLock;
+            if (!ProcessLocks.TryGetValue(subscriber, out procLock))
+            {
+                ProcessLocks[subscriber] = new object();
+            }
+
+            lock (ProcessLocks[subscriber])
+            {
+                InSequenceNumbers[subscriber] = sequenceNumber;
+                MessageQueue queue;
+                if (HoldbackQueue.TryGetValue(subscriber, out queue))
+                {
+                    string[] message = queue.GetAndRemove(sequenceNumber + 1);
+                    if (message == null)
+                    {
+                        return;
+                    }
+
+                    Utility.DebugLog("Unblocking message with sequence number: " + (sequenceNumber + 1));
+
+                    if (message[5].Equals("Sub"))
+                    {
+                        if (message[4].Equals(ProcessName))
+                            ProcessSubscription(message[0], message[1], message[2], int.Parse(message[3]), message[4]);
+                        else
+                            StoreSubscription(message[0], message[1], message[2], int.Parse(message[3]), message[4]);
+                    } else
+                    {
+                      //  if (message[4].Equals(ProcessName))
+                            ProcessUnsubscription(message[0], message[1], message[2], int.Parse(message[3]));
+
+                    }
+
+                }
             }
         }
 
-        private void ProcessSubscription(string subscriber, string topic, string siteName)
+        /// <summary>
+        ///     Stores the subscription and sends it to other sites. Returns true
+        /// if the subscription was successfuly added, false if it already existed
+        /// </summary>
+        private bool ProcessSubscription(string subscriber, string topic, string siteName, int sequenceNumber,
+            string deliverProcess)
         {
             // creates a subscriber lock if needed
             lock (this)
@@ -1176,23 +1471,9 @@ namespace Broker
 
             lock (ProcessLocks[subscriber])
             {
-                // get or create the subscription for this topic
-                SubscriptionSet subscriptionSet;
-                if (!RoutingTable.TryGetValue(topic, out subscriptionSet))
-                {
-                    subscriptionSet = new SubscriptionSet(topic);
-                }
-
-                // this prevents the same message from being processed twice
-                if (subscriptionSet.IsSubscribed(subscriber))
-                {
-                    Console.Out.WriteLine("Already subscribed. Discarding");
-                    return;
-                }
-
-                Console.Out.WriteLine("Receiving subscription on topic " + topic + " from  " + subscriber);
-                subscriptionSet.AddSubscriber(subscriber, siteName);
-                RoutingTable[topic] = subscriptionSet;
+                // stop if the subscription is already there
+                if (!StoreSubscription(subscriber, topic, siteName, sequenceNumber, deliverProcess))
+                    return false;
 
                 foreach (KeyValuePair<string, List<IBroker>> child in Children)
                 {
@@ -1201,14 +1482,8 @@ namespace Broker
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(siteName))
                     {
-                       /* if (this.LoggingLevel == LoggingLevel.Full)
-                        {
-                           // PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
-                            Thread logThread =
-                                new Thread(
-                                    () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                            logThread.Start();
-                        }*/
+                        Utility.DebugLog("Sending subcription of " + subscriber + " to site " + siteName +
+                                         " with seq " + sequenceNumber);
 
                         Thread thread =
                             new Thread(() =>
@@ -1229,7 +1504,7 @@ namespace Broker
                                         {
                                             try
                                             {
-                                                childBroker.DeliverSubscription(subscriber, topic, SiteName);
+                                                childBroker.DeliverSubscription(subscriber, topic, SiteName, sequenceNumber);
                                                 retry = false;
                                             } catch (RemotingException)
                                             {
@@ -1248,15 +1523,8 @@ namespace Broker
                 // we don't send the subscription to where it came from
                 if (!ParentSite.Equals(siteName) && !ParentSite.Equals("none"))
                 {
-                    /*if (this.LoggingLevel == LoggingLevel.Full)
-                    {
-                        //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
-                        Thread logThread =
-                            new Thread(
-                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                        logThread.Start();
-                    }*/
-
+                    Utility.DebugLog("Sending subcription of " + subscriber + " to site " + siteName +
+                                     " with seq " + sequenceNumber);
                     Thread thread = new Thread(() =>
                     {
                         bool retry = true;
@@ -1275,7 +1543,7 @@ namespace Broker
                                 {
                                     try
                                     {
-                                        parent.DeliverSubscription(subscriber, topic, SiteName);
+                                        parent.DeliverSubscription(subscriber, topic, SiteName, sequenceNumber);
                                         retry = false;
                                     } catch (RemotingException)
                                     {
@@ -1288,8 +1556,273 @@ namespace Broker
                         }
                     });
                     thread.Start();
-
                 }
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     Stores the subscriptions in the appropriate structures. Returns true if 
+        /// the subscription was added, false if it already existed (or if there is a delayed message)
+        /// </summary>
+        /// <returns> </returns>
+        private bool StoreSubscription(string subscriber, string topic, string siteName, int sequenceNumber, string deliveProcess)
+        {
+            // TODO: enable this for load balancing
+              if (!SubscriptionReceived(subscriber, topic, siteName, sequenceNumber, deliveProcess))
+                return false;
+
+            // get or create the subscription for this topic
+            SubscriptionSet subscriptionSet;
+            if (!RoutingTable.TryGetValue(topic, out subscriptionSet))
+            {
+                subscriptionSet = new SubscriptionSet(topic);
+            }
+
+            // this prevents the same message from being processed twice
+            if (subscriptionSet.IsSubscribed(subscriber))
+            {
+                //Utility.DebugLog("Already subscribed. Discarding");
+                return false;
+            }
+
+            // add to routing table
+            if (deliveProcess.Equals(ProcessName))
+                Utility.DebugLog("Receiving subscription on topic " + topic + " from  " + subscriber);
+            else
+                Utility.DebugLog("Receiving subscription update from  " + subscriber + " with seq no " + sequenceNumber);
+            subscriptionSet.AddSubscriber(subscriber, siteName);
+            RoutingTable[topic] = subscriptionSet;
+
+            // stores the subscription in the history - for resending later if needed
+            // TODO: uncomment this to enable the load balancing for subs
+             History.StoreSubscription(subscriber, topic, sequenceNumber);
+            SubscriptionProcessed(subscriber, sequenceNumber);
+            return true;
+        }
+
+        private bool SubscriptionReceived(string subscriber, string topic, string siteName, int sequenceNumber,
+            string deliverProcess)
+        {
+            string[] eventMessage = new string[6];
+            eventMessage[0] = subscriber;
+            eventMessage[1] = topic;
+            eventMessage[2] = siteName;
+            eventMessage[3] = sequenceNumber.ToString();
+            eventMessage[4] = deliverProcess;
+            eventMessage[5] = "Sub";
+
+            // creates a subscriber lock if needed
+            object procLock;
+            if (!ProcessLocks.TryGetValue(subscriber, out procLock))
+            {
+                ProcessLocks[subscriber] = new object();
+            }
+
+            lock (ProcessLocks[subscriber])
+            {
+                //lock (HoldbackQueue)
+                //{
+                if (Status.Equals(Status.Frozen))
+                {
+                    FrozenMessages.Add(eventMessage);
+                    return false;
+                }
+
+                // TODO: important tests!
+                //      - freeze a broker and see if it blocks the other by hiding a message
+                // and how they deal with that
+                //      - start documenting these tests and the systems response to them
+                //      - make this run with IPs 
+                //      - put the ordering to NO and make the necessary changes for the system 
+                // to behave in a fault tolerance way
+
+                int lastNumber;
+                if (!InSequenceNumbers.TryGetValue(subscriber, out lastNumber))
+                    lastNumber = 0;
+
+                if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
+                {
+                    MessageQueue queue;
+                    if (HoldbackQueue.TryGetValue(subscriber, out queue))
+                    {
+                        if (queue.GetSequenceNumbers().Contains(sequenceNumber))
+                        {
+                            return false;
+                        }
+                        queue.Add(eventMessage, sequenceNumber);
+                    } else
+                    {
+                        queue = new MessageQueue();
+                        queue.Add(eventMessage, sequenceNumber);
+                        HoldbackQueue[subscriber] = queue;
+                    }
+
+                    Utility.DebugLog("Delayed message detected. Queueing message subscription by '" + subscriber +
+                                     "' with seqNo " + sequenceNumber);
+
+                    // TODO: uncomment this to enable the load balancing for subs
+                    /*new Thread(() =>
+                    {
+                        bool retry = true;
+                        while (retry)
+                        {
+                            // waits half a second before checking the queue.  if the minimum sequence
+                            // number is this one, then our message didn't arrive and it's the one blocking 
+                            // the queue. In that case, we request it
+                            Thread.Sleep(500);
+                            lock (HoldbackQueue)
+                            {
+                                MessageQueue checkQueue;
+                                if (HoldbackQueue.TryGetValue(subscriber, out checkQueue) &&
+                                    checkQueue.GetSequenceNumbers().Any())
+                                {
+                                    int minSeqNo = checkQueue.GetSequenceNumbers().Min();
+                                    if (minSeqNo == sequenceNumber)
+                                    {
+                                        RequestSubscription(subscriber, siteName, sequenceNumber);
+                                        return;
+                                    }
+                                    // if the minimum sequence number is smaller than ours 
+                                    // we wait and repeat
+                                    if (minSeqNo < sequenceNumber)
+                                        continue;
+
+                                    return;
+                                }
+                                return;
+                            }
+                        }
+                    }).Start();*/
+
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     Requests a resend of a subscription by another process
+        /// </summary>
+        /// <param name="subscriber"></param>
+        /// <param name="fromSite"></param>
+        /// <param name="sequenceNumber"></param>
+        private void RequestSubscription(string subscriber, string fromSite, int sequenceNumber)
+        {
+            List<IBroker> brokers = null;
+
+            IProcess proc;
+            if (fromSite.Equals(SiteName) && LocalProcesses.TryGetValue(subscriber, out proc))
+            {
+                Utility.DebugLog("Requesting resend of sub " + (sequenceNumber - 1) + " from local subscriber");
+
+                IPublisher pub = (IPublisher) proc;
+                new Thread(() => pub.RequestPublication(sequenceNumber - 1)).Start();
+                return;
+            }
+
+            Children.TryGetValue(fromSite, out brokers);
+
+            if (brokers == null && fromSite.Equals(ParentSite))
+                brokers = ParentBrokers;
+            else
+            {
+                Utility.DebugLog("WARNING: The requesting site couldn't be found.");
+                return;
+            }
+
+            Utility.DebugLog("Requesting resend sub " + (sequenceNumber - 1) + " from remote broker");
+            new Thread(() =>
+            {
+                bool retry = true;
+                while (retry)
+                {
+                    IBroker broker;
+                    lock (brokers)
+                    {
+                        // picks a random broker for load-balancing purposes
+                        int brokerIndex = this.Random.Next(0, brokers.Count);
+                        broker = brokers[brokerIndex];
+                    }
+
+                    Thread subThread =
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                broker.ResendSubscription(subscriber, SiteName, sequenceNumber - 1);
+                                retry = false;
+                            } catch (RemotingException)
+                            {
+                            } catch (SocketException)
+                            {
+                            }
+                        });
+                    subThread.Start();
+                    subThread.Join();
+                }
+            }).Start();
+        }
+
+        /// <summary>
+        ///     Resends the requested subscription to the requesting site
+        /// </summary>
+        /// <param name="subscriber"></param>
+        /// <param name="requestingSite"></param>
+        /// <param name="sequenceNumber"></param>
+        public void ResendSubscription(string subscriber, string requestingSite, int sequenceNumber)
+        {
+            lock (ProcessLocks[subscriber])
+            {
+                string[] message = History.GetSubscription(subscriber, sequenceNumber);
+
+                if (message == null)
+                {
+                    Utility.DebugLog("No subscription stored for " + subscriber + " with seq no " + sequenceNumber);
+                    return;
+                }
+
+                List<IBroker> brokers;
+                if (requestingSite.Equals(ParentSite))
+                    brokers = ParentBrokers;
+
+                else if (!Children.TryGetValue(requestingSite, out brokers))
+                {
+                    Utility.DebugLog("WARNING: The requesting site '" + requestingSite + "' couldn't be found.");
+                    return;
+                }
+
+                Utility.DebugLog("Resending sub to " + requestingSite);
+                new Thread(() =>
+                {
+                    bool retry = true;
+                    while (retry)
+                    {
+                        IBroker broker;
+                        lock (brokers)
+                        {
+                            // picks a random broker for load-balancing purposes
+                            int childIndex = this.Random.Next(0, brokers.Count);
+                            broker = brokers[childIndex];
+                        }
+
+                        Thread subThread =
+                            new Thread(() =>
+                            {
+                                try
+                                {
+                                    broker.DeliverSubscription(message[0], message[1], SiteName, int.Parse(message[2]));
+                                    retry = false;
+                                } catch (RemotingException)
+                                {
+                                } catch (SocketException)
+                                {
+                                }
+                            });
+                        subThread.Start();
+                        subThread.Join();
+                    }
+                }).Start();
             }
         }
 
@@ -1299,7 +1832,7 @@ namespace Broker
         //
         //************************************************
 
-        public void DeliverUnsubscription(string subscriber, string topic, string siteName)
+        public void DeliverUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber)
         {
             lock (this)
             {
@@ -1326,7 +1859,7 @@ namespace Broker
                             {
                                 try
                                 {
-                                    broker.InformOfUnsubscription(subscriber, topic, siteName);
+                                    broker.InformOfUnsubscription(subscriber, topic, siteName, sequenceNumber);
                                 } catch (RemotingException)
                                 {
                                 } catch (SocketException)
@@ -1337,13 +1870,104 @@ namespace Broker
                         }
                     } else
                     {
-                        ProcessUnsubscription(subscriber, topic, siteName);
+                        ProcessUnsubscription(subscriber, topic, siteName, sequenceNumber);
                     }
                 }
             }
         }
 
-        public void ProcessUnsubscription(string subscriber, string topic, string siteName)
+        private bool UnsubscriptionReceived(string subscriber, string topic, string siteName, int sequenceNumber,
+            string deliverProcess)
+        {
+            string[] eventMessage = new string[6];
+            eventMessage[0] = subscriber;
+            eventMessage[1] = topic;
+            eventMessage[2] = siteName;
+            eventMessage[3] = sequenceNumber.ToString();
+            eventMessage[4] = deliverProcess;
+            eventMessage[5] = "Unsub";
+
+            // creates a subscriber lock if needed
+            object procLock;
+            if (!ProcessLocks.TryGetValue(subscriber, out procLock))
+            {
+                ProcessLocks[subscriber] = new object();
+            }
+
+            lock (ProcessLocks[subscriber])
+            {
+                if (Status.Equals(Status.Frozen))
+                {
+                    FrozenMessages.Add(eventMessage);
+                    return false;
+                }
+
+                int lastNumber;
+                if (!InSequenceNumbers.TryGetValue(subscriber, out lastNumber))
+                    lastNumber = 0;
+
+                if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
+                {
+                    MessageQueue queue;
+                    if (HoldbackQueue.TryGetValue(subscriber, out queue))
+                    {
+                        if (queue.GetSequenceNumbers().Contains(sequenceNumber))
+                        {
+                            return false;
+                        }
+                        queue.Add(eventMessage, sequenceNumber);
+                    }
+                    else
+                    {
+                        queue = new MessageQueue();
+                        queue.Add(eventMessage, sequenceNumber);
+                        HoldbackQueue[subscriber] = queue;
+                    }
+
+                    Utility.DebugLog("Delayed message detected. Queueing message unsubscription by '" + subscriber +
+                                     "' with seqNo " + sequenceNumber);
+
+                    // TODO: uncomment this to enable the load balancing for subs
+                    /*new Thread(() =>
+                    {
+                        bool retry = true;
+                        while (retry)
+                        {
+                            // waits half a second before checking the queue.  if the minimum sequence
+                            // number is this one, then our message didn't arrive and it's the one blocking 
+                            // the queue. In that case, we request it
+                            Thread.Sleep(500);
+                            lock (HoldbackQueue)
+                            {
+                                MessageQueue checkQueue;
+                                if (HoldbackQueue.TryGetValue(subscriber, out checkQueue) &&
+                                    checkQueue.GetSequenceNumbers().Any())
+                                {
+                                    int minSeqNo = checkQueue.GetSequenceNumbers().Min();
+                                    if (minSeqNo == sequenceNumber)
+                                    {
+                                        RequestSubscription(subscriber, siteName, sequenceNumber);
+                                        return;
+                                    }
+                                    // if the minimum sequence number is smaller than ours 
+                                    // we wait and repeat
+                                    if (minSeqNo < sequenceNumber)
+                                        continue;
+
+                                    return;
+                                }
+                                return;
+                            }
+                        }
+                    }).Start();*/
+
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public void ProcessUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber)
         {
             // creates a subscriber lock if needed
             lock (this)
@@ -1361,11 +1985,11 @@ namespace Broker
                 SubscriptionSet subscriptionSet;
                 if (!RoutingTable.TryGetValue(topic, out subscriptionSet) || !subscriptionSet.IsSubscribed(subscriber))
                 {
-                    Console.Out.WriteLine("Already unsubscribed. Discarding");
+                    Utility.DebugLog("Already unsubscribed. Discarding");
                     return;
                 }
 
-                Console.Out.WriteLine("Receiving unsubscription on topic " + topic + " from  " + subscriber);
+                Utility.DebugLog("Receiving unsubscription on topic " + topic + " from  " + subscriber);
 
                 subscriptionSet.RemoveSubscriber(subscriber);
                 RoutingTable[topic] = subscriptionSet;
@@ -1377,16 +2001,6 @@ namespace Broker
                     // we don't send the SubscriptionSet to where it came from
                     if (!child.Key.Equals(siteName))
                     {
-                       /* if (this.LoggingLevel == LoggingLevel.Full)
-                        {
-                            //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
-                            Thread logThread =
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                            logThread.Start();
-                        }*/
-
                         Thread thread = new Thread(() =>
                         {
                             bool retry = true;
@@ -1400,7 +2014,7 @@ namespace Broker
                                 {
                                     try
                                     {
-                                        childBroker.DeliverUnsubscription(subscriber, topic, SiteName);
+                                        childBroker.DeliverUnsubscription(subscriber, topic, SiteName, sequenceNumber);
                                         retry = false;
                                     } catch (RemotingException)
                                     {
@@ -1413,23 +2027,12 @@ namespace Broker
                             }
                         });
                         thread.Start();
-
-                        
                     }
                 }
 
                 // we don't send the subscription to where it came from
                 if (!ParentSite.Equals(siteName) && !ParentSite.Equals("none"))
                 {
-                  /*  if (this.LoggingLevel == LoggingLevel.Full)
-                    {
-                        //PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic);
-                        Thread logThread =
-                            new Thread(
-                                () => PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " + topic));
-                        logThread.Start();
-                    }*/
-                    
                     Thread thread = new Thread(() =>
                     {
                         bool retry = true;
@@ -1447,7 +2050,7 @@ namespace Broker
                             {
                                 try
                                 {
-                                    parent.DeliverUnsubscription(subscriber, topic, SiteName);
+                                    parent.DeliverUnsubscription(subscriber, topic, SiteName, sequenceNumber);
                                     retry = false;
                                 } catch (RemotingException)
                                 {
@@ -1461,13 +2064,12 @@ namespace Broker
                     });
 
                     thread.Start();
-
-                    
                 }
+                UnsubscriptionProcessed(subscriber, sequenceNumber);
             }
         }
 
-        public void InformOfUnsubscription(string subscriber, string topic, string siteName)
+        public void InformOfUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber)
         {
             // creates a subscriber lock if needed
             lock (this)
@@ -1496,7 +2098,7 @@ namespace Broker
                     {
                         try
                         {
-                            broker.InformOfUnsubscription(subscriber, topic, siteName);
+                            broker.InformOfUnsubscription(subscriber, topic, siteName, sequenceNumber);
                         } catch (RemotingException)
                         {
                         } catch (SocketException)
@@ -1507,13 +2109,47 @@ namespace Broker
                 }
 
                 // and deliver it
-                ProcessUnsubscription(subscriber, topic, siteName);
+                ProcessUnsubscription(subscriber, topic, siteName, sequenceNumber);
+            }
+        }
+
+        private void UnsubscriptionProcessed(string subscriber, int sequenceNumber)
+        {
+            if (this.OrderingGuarantee != OrderingGuarantee.Fifo)
+                return;
+
+            // creates a subscriber lock if needed
+            object procLock;
+            if (!ProcessLocks.TryGetValue(subscriber, out procLock))
+            {
+                ProcessLocks[subscriber] = new object();
+            }
+
+            lock (ProcessLocks[subscriber])
+            {
+                InSequenceNumbers[subscriber] = sequenceNumber;
+                MessageQueue queue;
+                if (HoldbackQueue.TryGetValue(subscriber, out queue))
+                {
+                    string[] message = queue.GetAndRemove(sequenceNumber + 1);
+                    if (message == null)
+                    {
+                        return;
+                    }
+
+                    Utility.DebugLog("Unblocking message with sequence number: " + (sequenceNumber + 1));
+
+                    if (message[5].Equals(ProcessName))
+                        ProcessSubscription(message[0], message[1], message[2], int.Parse(message[3]), message[4]);
+                    else
+                        StoreSubscription(message[0], message[1], message[2], int.Parse(message[3]), message[4]);
+                }
             }
         }
 
         public void AddSiblingBroker(string siblingUrl)
         {
-            Console.Out.WriteLine("Received sibling " + siblingUrl);
+            Utility.DebugLog("Received sibling " + siblingUrl);
             IBroker sibling = (IBroker) Activator.GetObject(typeof (IBroker), siblingUrl);
 
             try
@@ -1521,7 +2157,7 @@ namespace Broker
                 sibling.Ping();
             } catch (Exception)
             {
-                Console.Out.WriteLine("\tERROR: The sibling broker " + siblingUrl + " is down.");
+                Utility.DebugLog("\tERROR: The sibling broker " + siblingUrl + " is down.");
                 return;
             }
             lock (SiblingBrokers)
@@ -1585,7 +2221,7 @@ namespace Broker
                 {
                     string baseTopic = topic.Remove(subject.IndexOf("/*"));
 
-                    if (UtilityFunctions.StringEquals(subject, baseTopic) && RoutingTable.TryGetValue(subject, out subs))
+                    if (Utility.StringEquals(subject, baseTopic) && RoutingTable.TryGetValue(subject, out subs))
                     {
                         if (matchList == null)
                             matchList = new ConcurrentDictionary<string, string>();

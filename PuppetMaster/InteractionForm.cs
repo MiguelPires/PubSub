@@ -100,7 +100,7 @@ namespace PuppetMaster
                 int end = start + line.Length;
                 this.logBox.AppendText(line + "\r\n");
 
-                string[] tokens = line.Split(' ');
+               /* string[] tokens = line.Split(' ');
                 if (tokens[0].Equals("Wait"))
                 {
                     if (tokens.Length != 2)
@@ -113,7 +113,7 @@ namespace PuppetMaster
                     Thread.Sleep(numVal);
                 }
                 else
-                {
+                {*/
                     try
                     {
                         this.master.SendCommand(line);
@@ -124,7 +124,7 @@ namespace PuppetMaster
                         logBox.SelectionColor = Color.Red;
                         continue;
                     }
-                }
+             //   }
 
                 logBox.Select(start, end);
                 logBox.SelectionColor = Color.Black;

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Broker;
 
 namespace CommonTypes
 {
@@ -82,8 +84,8 @@ namespace CommonTypes
     {
         void RegisterBroker(string siteName, string brokerUrl);
         void RegisterPubSub(string procName, string procUrl);
-        void DeliverSubscription(string subscriber, string topic, string siteName);
-        void DeliverUnsubscription(string subscriber, string topic, string siteName);
+        void DeliverSubscription(string subscriber, string topic, string siteName, int sequenceNumber);
+        void DeliverUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber);
         void DeliverPublication(string publisher, string topic, string publication, string siteName, int sequenceNumber);
         void AddSiblingBroker(string siblingUrl);
     }
@@ -93,16 +95,19 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string process);
-        void InformOfSubscription(string subscriber, string topic, string siteName);
-        void InformOfUnsubscription(string subscriber, string topic, string siteName);
-        void RequestPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber=null);
+        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string deliverProcess);
+        void InformOfSubscription(string subscriber, string topic, string siteName, int sequenceNumber, string deliverProcess, IDictionary<string, int> state, IDictionary<string, MessageQueue> queue, IDictionary<string, IDictionary<string, int>> outSeqs);
+        void InformOfUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber);
+        void ResendPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber = null);
+        void ResendSubscription(string subscriber, string topic, int sequenceNumber);
+        void NotifyOfLast(string publisher, string askingSite, int sequenceNumber, string subscriber=null);
     }
 
     public interface IPublisher : IProcess
     {
         void SendPublication(string topic, string publication, int sequenceNumber);
         void RequestPublication(int sequenceNumber);
+        void NotifyOfLast(string publisher, string fromSite, int sequenceNumber);
     }
 
     public interface ISubscriber : IProcess
@@ -113,8 +118,22 @@ namespace CommonTypes
     /// <summary>
     /// A library of useful functions shared between various entities
     /// </summary>
-    public class UtilityFunctions
+    public class Utility
     {
+        /// <summary>
+        //      Enables or disables verbose printing of info 
+        /// </summary>
+        public const bool DEBUG = true;
+
+        /// <summary>
+        ///     Prints a message according to the debug variable
+        /// </summary>
+        /// <param name="logMessage"></param>
+        public static void DebugLog(string logMessage)
+        {
+            if (DEBUG)
+                Console.Out.WriteLine(logMessage);
+        }
         /// <summary>
         ///     Returns the port used for the PupperMaster at a given site
         /// </summary>
@@ -125,7 +144,7 @@ namespace CommonTypes
             // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
             var a = Regex.Match(siteName, @"\d+").Value;
             var siteNumber = Int32.Parse(a);
-            return (8080 + siteNumber);
+            return (8751 + siteNumber);
         }
 
         /// <summary>

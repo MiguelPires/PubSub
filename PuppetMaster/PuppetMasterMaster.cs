@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Threading;
 using CommonTypes;
@@ -163,21 +164,21 @@ namespace PuppetMaster
                                 try
                                 {
                                     process.DeliverCommand(processArgs);
-                                } catch (Exception)
+                                } catch (Exception ex)
                                 {
                                     // the crash command is supposed to generate an exception
                                     if (!processArgs[0].Equals("Crash"))
-                                        throw;
+                                        Utility.DebugLog("WARNING: " +ex.Message);
                                 }
                             } else
                             {
                                 try
                                 {
                                     Slaves[site].DeliverCommand(command);
-                                } catch (Exception)
+                                } catch (Exception ex)
                                 {
                                     if (!command[0].Equals("Crash"))
-                                        throw;
+                                        Utility.DebugLog("WARNING: " +ex.Message);
                                 }
                             }
                         }
@@ -248,11 +249,15 @@ namespace PuppetMaster
             try
             {
                 // clean input
-                string[] tokens = command.Split(' ');
+                string[] tokens = command.Split();
                 for (int i = 0; i < tokens.Length; ++i)
                 {
                     tokens[i] = tokens[i].Trim();
                 }
+
+                // deletes empty tokens 
+                tokens = tokens.Where(val => !string.IsNullOrWhiteSpace(val)).ToArray();
+
                 // validate the specified process
                 string site;
                 if (!tokens[0].Equals("Status") && !tokens[0].Equals("Wait") && !this.SiteProcesses.TryGetValue(tokens[1], out site))

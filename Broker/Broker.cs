@@ -126,7 +126,7 @@ namespace Broker
         public void DeliverPublication(string publisher, string topic, string publication, string fromSite,
             int sequenceNumber)
         {
-            Console.Out.WriteLine("Deliver pub - seqNo " + sequenceNumber);
+            //Console.Out.WriteLine("Deliver pub - seqNo " + sequenceNumber);
 
             // we might have just one broker for debug purposes
             if (SiblingBrokers.Count != 0)
@@ -197,7 +197,7 @@ namespace Broker
 
                     if (deliverProcess.Equals(ProcessName))
                     {
-                        Console.Out.WriteLine("PROCESS - " + sequenceNumber);
+                        Utility.DebugLog("Processing publicaiton " + sequenceNumber);
                         ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
                     }
                     else
@@ -994,6 +994,13 @@ namespace Broker
         /// <param name="subscriber"></param>
         public void ResendPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber = null)
         {
+            // creates a subscriber lock if needed
+            object procLock;
+            if (!ProcessLocks.TryGetValue(publisher, out procLock))
+            {
+                ProcessLocks[publisher] = new object();
+            }
+
             lock (ProcessLocks[publisher])
             {
                 string[] message = History.GetPublication(requestingSite, publisher, sequenceNumber);
@@ -1421,9 +1428,10 @@ namespace Broker
                 ProcessLocks[subscriber] = new object();
             }
 
-            lock (ProcessLocks[subscriber])
+            lock (Subscribing)
             {
                 InSequenceNumbers[subscriber] = sequenceNumber;
+                Utility.DebugLog("SEQ NO for "+subscriber+" is "+sequenceNumber);
                 MessageQueue queue;
                 if (HoldbackQueue.TryGetValue(subscriber, out queue))
                 {
@@ -1433,7 +1441,7 @@ namespace Broker
                         return;
                     }
 
-                    Utility.DebugLog("Unblocking message with sequence number: " + (sequenceNumber + 1));
+                    Utility.DebugLog("Unblocking sub or unsub with sequence number: " + (sequenceNumber + 1));
 
                     if (message[5].Equals("Sub"))
                     {
@@ -1443,11 +1451,12 @@ namespace Broker
                             StoreSubscription(message[0], message[1], message[2], int.Parse(message[3]), message[4]);
                     } else
                     {
-                      //  if (message[4].Equals(ProcessName))
-                            ProcessUnsubscription(message[0], message[1], message[2], int.Parse(message[3]));
-
+                        //  if (message[4].Equals(ProcessName))
+                        ProcessUnsubscription(message[0], message[1], message[2], int.Parse(message[3]));
                     }
-
+                } else
+                {
+                    Utility.DebugLog("There is no queue for  "+subscriber);
                 }
             }
         }
@@ -1569,8 +1578,8 @@ namespace Broker
         private bool StoreSubscription(string subscriber, string topic, string siteName, int sequenceNumber, string deliveProcess)
         {
             // TODO: enable this for load balancing
-              if (!SubscriptionReceived(subscriber, topic, siteName, sequenceNumber, deliveProcess))
-                return false;
+         //     if (!SubscriptionReceived(subscriber, topic, siteName, sequenceNumber, deliveProcess))
+       //         return false;
 
             // get or create the subscription for this topic
             SubscriptionSet subscriptionSet;
@@ -1597,7 +1606,7 @@ namespace Broker
             // stores the subscription in the history - for resending later if needed
             // TODO: uncomment this to enable the load balancing for subs
              History.StoreSubscription(subscriber, topic, sequenceNumber);
-            SubscriptionProcessed(subscriber, sequenceNumber);
+           // SubscriptionProcessed(subscriber, sequenceNumber);
             return true;
         }
 
@@ -1619,7 +1628,7 @@ namespace Broker
                 ProcessLocks[subscriber] = new object();
             }
 
-            lock (ProcessLocks[subscriber])
+            lock (Subscribing)
             {
                 //lock (HoldbackQueue)
                 //{
@@ -1629,17 +1638,11 @@ namespace Broker
                     return false;
                 }
 
-                // TODO: important tests!
-                //      - freeze a broker and see if it blocks the other by hiding a message
-                // and how they deal with that
-                //      - start documenting these tests and the systems response to them
-                //      - make this run with IPs 
-                //      - put the ordering to NO and make the necessary changes for the system 
-                // to behave in a fault tolerance way
-
                 int lastNumber;
                 if (!InSequenceNumbers.TryGetValue(subscriber, out lastNumber))
                     lastNumber = 0;
+
+                Utility.DebugLog("Last no for "+subscriber+" is "+lastNumber);
 
                 if (this.OrderingGuarantee == OrderingGuarantee.Fifo && sequenceNumber > lastNumber + 1)
                 {
@@ -1659,7 +1662,7 @@ namespace Broker
                     }
 
                     Utility.DebugLog("Delayed message detected. Queueing message subscription by '" + subscriber +
-                                     "' with seqNo " + sequenceNumber);
+                                     "' on topic "+topic+" with seqNo " + sequenceNumber);
 
                     // TODO: uncomment this to enable the load balancing for subs
                     /*new Thread(() =>
@@ -1845,7 +1848,7 @@ namespace Broker
 
             lock (ProcessLocks[subscriber])
             {
-                Console.Out.WriteLine("Deliver unsub");
+                //Console.Out.WriteLine("Deliver unsub");
 
                 lock (SiblingBrokers)
                 {
@@ -2212,39 +2215,53 @@ namespace Broker
         /// <returns></returns>
         private IDictionary<string, string> GetTopicMatchList(string topic)
         {
+            //Console.Out.WriteLine("TOPIC "+topic+ " matched with: ");
             IDictionary<string, string> matchList = null;
 
-            SubscriptionSet subs;
             foreach (string subject in RoutingTable.Keys)
             {
+                Console.Out.WriteLine("* Subject " + subject);
+
+                SubscriptionSet subs;
                 if (subject.Contains("/*"))
                 {
+                    Console.Out.WriteLine("*Topic "+topic);
                     string baseTopic = topic.Remove(subject.IndexOf("/*"));
+                    Console.Out.WriteLine("*Base " + baseTopic);
+                    
+                    // TODO: correr outra vez - o topic devia coincidir com o baseTOpic
 
-                    if (Utility.StringEquals(subject, baseTopic) && RoutingTable.TryGetValue(subject, out subs))
+                    if (Utility.StringEquals(topic, baseTopic) && RoutingTable.TryGetValue(subject, out subs))
                     {
+                        Console.Out.WriteLine("- "+subject);
                         if (matchList == null)
                             matchList = new ConcurrentDictionary<string, string>();
 
                         foreach (KeyValuePair<string, string> match in subs.GetMatchList())
                         {
+                            Console.Out.WriteLine("* Process "+match.Key);
                             matchList[match.Key] = match.Value;
                         }
                     }
                 } else
                 {
-                    if (RoutingTable.TryGetValue(subject, out subs))
+                    if (RoutingTable.TryGetValue(topic, out subs))
                     {
                         if (matchList == null)
                             matchList = new ConcurrentDictionary<string, string>();
 
                         foreach (KeyValuePair<string, string> match in subs.GetMatchList())
                         {
+                            Console.Out.WriteLine("Topic: "+topic+"; Site: "+match.Value+"; Process: " + match.Key);
+
                             matchList[match.Key] = match.Value;
                         }
                     }
                 }
             }
+            if (matchList != null)
+                Console.Out.WriteLine("Num of procs "+ matchList.Count);
+            
             return matchList;
         }
 

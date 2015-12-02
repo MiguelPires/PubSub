@@ -23,7 +23,6 @@ namespace Subscriber
         // a hold-back queue that stores delayed messages
         public IDictionary<string, MessageQueue> HoldbackQueue { get; } =
             new ConcurrentDictionary<string, MessageQueue>();
-
         // a registry of topics subscribed. This is useful to clean up after an unsubscription
         public IDictionary<string, List<string>> Topics { get; } = new ConcurrentDictionary<string, List<string>>();
         // the sequence number used by messages sent to the broker group
@@ -41,6 +40,10 @@ namespace Subscriber
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
+                int port, smallestPort = int.MaxValue;
+                string name;
+                Utility.DivideUrl(brokerUrl, out port, out name);
+
                 Utility.ConnectFunction<IBroker> fun = (string url) =>
                 {
                     IBroker broker = (IBroker) Activator.GetObject(typeof (IBroker), url);
@@ -53,6 +56,11 @@ namespace Subscriber
                 {
                     IBroker brokerObject = Utility.TryConnection(fun, brokerUrl);
                     Brokers.Add(brokerObject);
+                    if (port < smallestPort)
+                    {
+                        smallestPort = port;
+                        DesignatedBroker = brokerObject;
+                    }
                 } catch (Exception)
                 {
                     Console.Out.WriteLine("********************************************\r\n");
@@ -61,7 +69,6 @@ namespace Subscriber
                 }
             }
 
-            DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
         }
 
         /// <summary>
@@ -86,13 +93,14 @@ namespace Subscriber
                     base.DeliverCommand(command);
                     PrintStatus();
                     break;
+
                 case "Crash":
                 case "Freeze":
                     base.DeliverCommand(command);
                     break;
 
                 case "Unfreeze":
-                    Console.Out.WriteLine("Unfreezing");
+                    Utility.DebugLog("Unfreezing");
                     Status = Status.Unfrozen;
                     ProcessFrozenListCommands();
                     break;
@@ -106,7 +114,7 @@ namespace Subscriber
                     break;
 
                 default:
-                    Console.Out.WriteLine("Command: " + command[0] + " doesn't exist!");
+                    Utility.DebugLog("Command: " + command[0] + " doesn't exist!");
                     return false;
             }
             return true;
@@ -114,33 +122,47 @@ namespace Subscriber
 
         private void PrintStatus()
         {
-            if (HoldbackQueue.Keys.Count == 0)
+            bool emptyQueues = true;
+            foreach (var queue in HoldbackQueue.Values)
             {
-                Console.Out.WriteLine("\t There are no delayed publications");
-                Console.Out.WriteLine("*******************\t\n");
-                return;
-            }
-
-            Console.Out.WriteLine("\tPublications in HoldBack queue: ");
-            foreach (string pub in HoldbackQueue.Keys)
-            {
-                MessageQueue queue = HoldbackQueue[pub];
-                ICollection<int> seqNums = queue.GetSequenceNumbers();
-
-                if (seqNums.Count == 0)
-                    continue;
-
-                Console.Out.Write("\tPublisher '" + pub + "' has messages ");
-
-                foreach (int seqNum in queue.GetSequenceNumbers())
+                if (queue.GetSequenceNumbers() != null && queue.GetSequenceNumbers().Count !=0)
                 {
-                    Console.Out.Write(seqNum + " ");
+                    emptyQueues = false;
+                    break;
                 }
 
-                Console.Out.WriteLine("in HoldBack queue");
+            }
+            // prints delayed messages in holdback queue
+            if (HoldbackQueue.Keys.Count == 0 && emptyQueues)
+            {
+                Console.Out.WriteLine("\t There are no delayed publications");
+            } else
+            {
+                Console.Out.WriteLine("\tPublications in HoldBack queue: ");
+                foreach (string pub in HoldbackQueue.Keys)
+                {
+                    MessageQueue queue = HoldbackQueue[pub];
+                    ICollection<int> seqNums = queue.GetSequenceNumbers();
+
+                    if (seqNums.Count == 0)
+                        continue;
+
+                    Console.Out.Write("\tPublisher '" + pub + "' has messages ");
+
+                    foreach (int seqNum in queue.GetSequenceNumbers())
+                    {
+                        Console.Out.Write(seqNum + " ");
+                    }
+
+                    Console.Out.WriteLine("in HoldBack queue");
+                }
             }
 
-
+            // prints number of received message
+            foreach (var pair in InSequenceNumbers)
+            {
+                Console.Out.WriteLine("\t Received "+pair.Value+" messages from "+pair.Key);
+            }
             Console.Out.WriteLine("*******************\t\n");
         }
 
@@ -157,10 +179,11 @@ namespace Subscriber
             {
                 if (PublicationReceived(publisher, topic, publication, sequenceNumber))
                 {
-                    Console.Out.WriteLine("Received publication '" + publication + "' with seq no " + sequenceNumber);
+                    Utility.DEBUG = true;
+                    Utility.DebugLog("Received publication '" + publication + "' with seq no " + sequenceNumber);
+                    Utility.DEBUG = false;
                     PublicationProcessed(publisher, topic, sequenceNumber);
                     Notify(publisher, topic, sequenceNumber);
-
                 }
             }
         }
@@ -202,11 +225,7 @@ namespace Subscriber
                                         DesignatedBroker.NotifyOfLast(publisher, SiteName, sequenceNumber, ProcessName);
                                         Utility.DebugLog("Notifying of last pub with seq no " + sequenceNumber);
                                         retry = false;
-                                    } catch (RemotingException)
-                                    {
-                                        DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
-                                    }
-                                    catch (SocketException)
+                                    } catch (Exception)
                                     {
                                         DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
                                     }
@@ -307,7 +326,7 @@ namespace Subscriber
                 string[] message = queue.GetAndRemove(sequenceNumber + 1);
                 if (message == null)
                     return;
-                Console.Out.WriteLine("Unblocking publication with seq " + (sequenceNumber + 1));
+                Utility.DebugLog("Unblocking publication with seq " + (sequenceNumber + 1));
 
                 thread = new Thread(
                     () => DeliverPublication(message[0], message[1], message[2], sequenceNumber + 1));
@@ -322,7 +341,7 @@ namespace Subscriber
         /// <param name="sequenceNumber"></param>
         private void Request(string publisher, int sequenceNumber)
         {
-            Console.Out.WriteLine("Requesting resend of seq no " + (sequenceNumber - 1) + " from broker");
+            Utility.DebugLog("Requesting resend of seq no " + (sequenceNumber - 1) + " from broker");
             Thread thread =
                 new Thread(() =>
                 {
@@ -385,10 +404,10 @@ namespace Subscriber
             int seqNo;
             lock (this)
             {
-                ++OutSequenceNumber;
-                seqNo = OutSequenceNumber;
+                seqNo = ++OutSequenceNumber;
             }
 
+            Utility.DebugLog("Subscribing to topic "+topic+" with seq no "+seqNo);
             bool retry = true;
             while (retry)
             {

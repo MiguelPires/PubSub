@@ -2,8 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Net.Sockets;
-using System.Runtime.Remoting;
 using System.Threading;
 using CommonTypes;
 
@@ -86,10 +84,9 @@ namespace PuppetMaster
                                     try
                                     {
                                         proc.DeliverCommand(new string[1] {command[1]});
-                                    } catch (RemotingException)
+                                    } catch (Exception ex)
                                     {
-                                    } catch (SocketException)
-                                    {
+                                        Utility.DebugLog(ex.Message);
                                     }
                                 }).Start();
                             }
@@ -100,7 +97,16 @@ namespace PuppetMaster
                             Array.Copy(command, 1, processArgs, 0, command.Length - 1);
                             IProcess process = LocalProcesses[processName];
 
-                            new Thread(() => process.DeliverCommand(processArgs)).Start();
+                            new Thread(() =>
+                            {
+                                try
+                                {
+                                    process.DeliverCommand(processArgs);
+                                } catch (Exception ex)
+                                {
+                                    Utility.DebugLog(ex.Message);
+                                }
+                            }).Start();
                         }
                     } else
                         Monitor.Wait(this.CommandQueue);

@@ -123,7 +123,7 @@ namespace CommonTypes
         /// <summary>
         //      Enables or disables verbose printing of info 
         /// </summary>
-        public const bool DEBUG = true;
+        public static bool DEBUG = false;
 
         /// <summary>
         ///     Prints a message according to the debug variable

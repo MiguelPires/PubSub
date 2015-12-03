@@ -1,9 +1,11 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Drawing;
-using System.Linq;
-using System.Threading;
 using System.Windows.Forms;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
@@ -14,14 +16,13 @@ namespace PuppetMaster
         public InteractionForm(PuppetMasterMaster master, string siteName)
         {
             this.master = master;
-            this.Text = "Command - " + siteName;
+            Text = "Command - " + siteName;
             InitializeComponent();
-            IndividualBox.KeyDown += iKeyDown;
-            GroupBox.KeyDown += gKeyDown;
-
+            this.IndividualBox.KeyDown += iKeyDown;
+            this.GroupBox.KeyDown += gKeyDown;
         }
 
-        void iKeyDown(object sender, KeyEventArgs e)
+        private void iKeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
@@ -29,9 +30,9 @@ namespace PuppetMaster
             }
         }
 
-        void gKeyDown(object sender, KeyEventArgs e)
+        private void gKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter && Control.ModifierKeys != Keys.Shift)
+            if (e.KeyCode == Keys.Enter && ModifierKeys != Keys.Shift)
             {
                 GroupButton_Click(sender, e);
             }
@@ -39,11 +40,11 @@ namespace PuppetMaster
 
         public void DeliverMessage(string message)
         {
-            int start = logBox.Text.Length;
+            int start = this.logBox.Text.Length;
             int end = start + message.Length;
             this.logBox.AppendText(message.Trim() + "\r\n");
-            logBox.Select(start, end);
-            logBox.SelectionColor = Color.Black;
+            this.logBox.Select(start, end);
+            this.logBox.SelectionColor = Color.Black;
         }
 
         private void textBox1_TextChanged(object sender, EventArgs e)
@@ -59,23 +60,22 @@ namespace PuppetMaster
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
                 return;
 
-            int start = logBox.Text.Length;
-            int end = start + IndividualBox.Text.Length;
+            int start = this.logBox.Text.Length;
+            int end = start + this.IndividualBox.Text.Length;
 
-            string command = IndividualBox.Text;
+            string command = this.IndividualBox.Text;
             try
             {
                 this.master.SendCommand(command.Trim());
                 this.logBox.AppendText(this.IndividualBox.Text + "\r\n");
-                logBox.Select(start, end);
-                logBox.SelectionColor = Color.Black;
-            }
-            catch (CommandParsingException ex)
+                this.logBox.Select(start, end);
+                this.logBox.SelectionColor = Color.Black;
+            } catch (CommandParsingException ex)
             {
                 Console.Out.WriteLine(ex.Message);
-                this.logBox.AppendText(this.IndividualBox.Text+"\r\n");
-                logBox.Select(start, end);
-                logBox.SelectionColor = Color.Red;
+                this.logBox.AppendText(this.IndividualBox.Text + "\r\n");
+                this.logBox.Select(start, end);
+                this.logBox.SelectionColor = Color.Red;
             }
             this.IndividualBox.Clear();
         }
@@ -96,11 +96,11 @@ namespace PuppetMaster
                 if (string.IsNullOrWhiteSpace(line))
                     continue;
 
-                int start = logBox.Text.Length;
+                int start = this.logBox.Text.Length;
                 int end = start + line.Length;
                 this.logBox.AppendText(line + "\r\n");
 
-               /* string[] tokens = line.Split(' ');
+                /* string[] tokens = line.Split(' ');
                 if (tokens[0].Equals("Wait"))
                 {
                     if (tokens.Length != 2)
@@ -114,20 +114,20 @@ namespace PuppetMaster
                 }
                 else
                 {*/
-                    try
-                    {
-                        this.master.SendCommand(line);
-                    } catch (CommandParsingException ex)
-                    {
-                        Console.Out.WriteLine(ex.Message);
-                        logBox.Select(start, end);
-                        logBox.SelectionColor = Color.Red;
-                        continue;
-                    }
-             //   }
+                try
+                {
+                    this.master.SendCommand(line);
+                } catch (CommandParsingException ex)
+                {
+                    Console.Out.WriteLine(ex.Message);
+                    this.logBox.Select(start, end);
+                    this.logBox.SelectionColor = Color.Red;
+                    continue;
+                }
+                //   }
 
-                logBox.Select(start, end);
-                logBox.SelectionColor = Color.Black;
+                this.logBox.Select(start, end);
+                this.logBox.SelectionColor = Color.Black;
             }
 
             this.GroupBox.Clear();

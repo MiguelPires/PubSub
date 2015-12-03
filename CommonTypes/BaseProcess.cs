@@ -1,11 +1,11 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
-using System.Runtime.Remoting;
-using System.Runtime.Remoting.Messaging;
+
+#endregion
 
 namespace CommonTypes
 {
@@ -24,7 +24,7 @@ namespace CommonTypes
         // a queue of actions saved when process state is frozen (events that are yet to be processed)
         public ConcurrentQueue<string[]> CommandBacklog { get; set; } = new ConcurrentQueue<string[]>();
         // a list with messages received in the frozen state
-        public List<string[]> FrozenMessages { get; set; } = new List<string[]>();
+        public ConcurrentQueue<string[]> FrozenMessages { get; set; } = new ConcurrentQueue<string[]>();
         // the logging setting
         public LoggingLevel LoggingLevel;
         // the ordering setting
@@ -48,6 +48,7 @@ namespace CommonTypes
             this.OrderingGuarantee = PuppetMaster.GetOrderingGuarantee();
             this.RoutingPolicy = PuppetMaster.GetRoutingPolicy();
         }
+
         /// <summary>
         /// Delivers a command to a process
         /// </summary>
@@ -69,8 +70,7 @@ namespace CommonTypes
                         CommandBacklog.Enqueue(command);
                         break;
                 }
-            }
-            else
+            } else
             {
                 switch (command[0])
                 {
@@ -169,35 +169,34 @@ namespace CommonTypes
 
                 // connects to the specified site's puppetMaster
                 IPuppetMasterSlave puppetMasterSlave =
-                    (IPuppetMasterSlave)Activator.GetObject(typeof(IPuppetMasterSlave), url);
+                    (IPuppetMasterSlave) Activator.GetObject(typeof (IPuppetMasterSlave), url);
                 brokerUrls = puppetMasterSlave.GetBrokers();
 
                 return brokerUrls;
             };
 
-            List<string> brokersUrlsResult = Utility.TryConnection<List<string>>(fun, puppetMasterUrl);
+            List<string> brokersUrlsResult = Utility.TryConnection(fun, puppetMasterUrl);
             return brokersUrlsResult;
         }
-        
+
         private void ConnectToPuppetMaster(string puppetMasterUrl)
         {
             // connects to the specified site's puppetMaster
             Utility.ConnectFunction<IPuppetMaster> fun = (string url) =>
             {
-                IPuppetMaster puppet = (IPuppetMaster)Activator.GetObject(typeof(IPuppetMaster), url);
+                IPuppetMaster puppet = (IPuppetMaster) Activator.GetObject(typeof (IPuppetMaster), url);
                 puppet.Ping();
 
                 return puppet;
             };
 
-            IPuppetMaster puppetMaster = Utility.TryConnection<IPuppetMaster>(fun, puppetMasterUrl);
+            IPuppetMaster puppetMaster = Utility.TryConnection(fun, puppetMasterUrl);
             try
             {
                 PuppetMaster = (IPuppetMasterSlave) puppetMaster;
-            }
-            catch (Exception)
+            } catch (Exception)
             {
-                    PuppetMaster = (IPuppetMasterMaster)puppetMaster; 
+                PuppetMaster = (IPuppetMasterMaster) puppetMaster;
             }
         }
 

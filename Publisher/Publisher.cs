@@ -118,7 +118,7 @@ namespace Publisher
                 seqNo = sequenceNumber;
             }
 
-            History.AddMessage(new[] { topic, publication }, seqNo);
+            History.AddMessage(new[] {topic, publication}, seqNo);
             new Thread(() =>
             {
                 bool retry = true;
@@ -146,7 +146,6 @@ namespace Publisher
                     subThread.Join();
                 }
             }).Start();
-
         }
 
         public void RequestPublication(int sequenceNumber)
@@ -194,7 +193,6 @@ namespace Publisher
                         PuppetMaster.DeliverLog("PubEvent " + ProcessName + ", " + topic);
                     } catch (Exception)
                     {
-                        
                     }
                 }).Start();
                 Thread.Sleep(timeInterval);
@@ -216,7 +214,7 @@ namespace Publisher
                 for (int i = sequenceNumber + 1; i <= OutSequenceNumber; i++)
                 {
                     SendPublication(message[0], message[1], i);
-                    Utility.DebugLog("Resend message seq no "+i+" after notif");
+                    Utility.DebugLog("Resend message seq no " + i + " after notif");
                 }
             }
         }

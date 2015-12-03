@@ -1,6 +1,10 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Windows.Forms;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
@@ -11,12 +15,12 @@ namespace PuppetMaster
         public LoggingForm(string siteName)
         {
             InitializeComponent();
-            this.Text = "Log - " + siteName;
+            Text = "Log - " + siteName;
         }
 
         public void DeliverMessage(string log)
         {
-            LogBox.Text += log + "\r\n";
+            this.LogBox.Text += log + "\r\n";
         }
 
         private void label1_Click(object sender, EventArgs e)

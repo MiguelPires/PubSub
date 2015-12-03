@@ -1,18 +1,21 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Runtime.Serialization.Formatters;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
     internal static class PuppetMasterProgram
     {
-        delegate void DelegateDeliverMessage(string message);
+        private delegate void DelegateDeliverMessage(string message);
 
         /// <summary>
         ///     The main entry point for the application.
@@ -51,7 +54,7 @@ namespace PuppetMaster
             LoggingForm form = new LoggingForm(siteName);
             puppet.Form = form;
             puppet.LogDelegate = new DelegateDeliverMessage(form.DeliverMessage);
-            
+
             Application.Run(form);
 
             Console.WriteLine(@"Press any key to exit");

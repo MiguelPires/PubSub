@@ -1,6 +1,10 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+
+#endregion
 
 namespace Broker
 {
@@ -29,7 +33,7 @@ namespace Broker
         {
             if (!Processes.Remove(processName))
             {
-                Console.Out.WriteLine(processName + " is already unsubscribed to " + Topic +".");
+                Console.Out.WriteLine(processName + " is already unsubscribed to " + Topic + ".");
             }
         }
 

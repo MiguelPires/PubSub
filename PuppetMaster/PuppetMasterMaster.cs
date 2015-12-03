@@ -53,7 +53,16 @@ namespace PuppetMaster
                             return null;
                         };
 
-                        Thread thread = new Thread(() => Utility.TryConnection(fun, ""));
+                        Thread thread = new Thread(() =>
+                        {
+                            try
+                            {
+                                Utility.TryConnection(fun, "");
+                            } catch (Exception ex)
+                            {
+                                Utility.DebugLog(ex.Message);
+                            }
+                        });
                         thread.Start();
                     }
                 }
@@ -106,9 +115,9 @@ namespace PuppetMaster
 
                         if (processName.Equals("Wait"))
                         {
-                            Monitor.Exit(CommandQueue);
+                            Monitor.Exit(this.CommandQueue);
                             Thread.Sleep(int.Parse(command[1]));
-                            Monitor.Enter(CommandQueue);
+                            Monitor.Enter(this.CommandQueue);
                             continue;
                         }
 
@@ -168,7 +177,7 @@ namespace PuppetMaster
                                 {
                                     // the crash command is supposed to generate an exception
                                     if (!processArgs[0].Equals("Crash"))
-                                        Utility.DebugLog("WARNING: " +ex.Message);
+                                        Utility.DebugLog("WARNING: " + ex.Message);
                                 }
                             } else
                             {
@@ -178,7 +187,7 @@ namespace PuppetMaster
                                 } catch (Exception ex)
                                 {
                                     if (!command[0].Equals("Crash"))
-                                        Utility.DebugLog("WARNING: " +ex.Message);
+                                        Utility.DebugLog("WARNING: " + ex.Message);
                                 }
                             }
                         }
@@ -260,7 +269,8 @@ namespace PuppetMaster
 
                 // validate the specified process
                 string site;
-                if (!tokens[0].Equals("Status") && !tokens[0].Equals("Wait") && !this.SiteProcesses.TryGetValue(tokens[1], out site))
+                if (!tokens[0].Equals("Status") && !tokens[0].Equals("Wait") &&
+                    !this.SiteProcesses.TryGetValue(tokens[1], out site))
                 {
                     throw new CommandParsingException("WARNING: The process " + tokens[0] + " couldn't be found.");
                 }

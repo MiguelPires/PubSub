@@ -1,20 +1,20 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Runtime.Serialization.Formatters;
-using System.Text;
-using System.Threading.Tasks;
 using CommonTypes;
+
+#endregion
 
 namespace Subscriber
 {
-    class SubscriberProgram
+    internal class SubscriberProgram
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             if (args.Length != 4)
             {
@@ -51,8 +51,7 @@ namespace Subscriber
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
                 RemotingServices.Marshal(subscriber, prop["name"].ToString(), typeof (ISubscriber));
-            }
-            catch (Exception)
+            } catch (Exception)
             {
                 Console.Out.WriteLine("********************************************\r\n");
                 Console.Out.WriteLine("\tERROR: A problem occured while registering this service");

@@ -4,8 +4,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Sockets;
-using System.Runtime.Remoting;
 using System.Threading;
 using Broker;
 using CommonTypes;
@@ -23,6 +21,7 @@ namespace Subscriber
         // a hold-back queue that stores delayed messages
         public IDictionary<string, MessageQueue> HoldbackQueue { get; } =
             new ConcurrentDictionary<string, MessageQueue>();
+
         // a registry of topics subscribed. This is useful to clean up after an unsubscription
         public IDictionary<string, List<string>> Topics { get; } = new ConcurrentDictionary<string, List<string>>();
         // the sequence number used by messages sent to the broker group
@@ -68,7 +67,6 @@ namespace Subscriber
                     Console.Out.WriteLine("\r\n********************************************");
                 }
             }
-
         }
 
         /// <summary>
@@ -84,39 +82,43 @@ namespace Subscriber
                 return true;
             }
 
-            string complete = string.Join(" ", command);
-            Console.Out.WriteLine("Received command: " + complete);
-            switch (command[0])
+            lock (this)
             {
-                // generic commands
-                case "Status":
-                    base.DeliverCommand(command);
-                    PrintStatus();
-                    break;
+                string complete = string.Join(" ", command);
+                Console.Out.WriteLine("Received command: " + complete);
+                switch (command[0])
+                {
+                    // generic commands
+                    case "Status":
+                        base.DeliverCommand(command);
+                        PrintStatus();
+                        break;
 
-                case "Crash":
-                case "Freeze":
-                    base.DeliverCommand(command);
-                    break;
+                    case "Crash":
+                    case "Freeze":
+                        base.DeliverCommand(command);
+                        break;
 
-                case "Unfreeze":
-                    Utility.DebugLog("Unfreezing");
-                    Status = Status.Unfrozen;
-                    ProcessFrozenListCommands();
-                    break;
+                    case "Unfreeze":
+                        Utility.DebugLog("Unfreezing");
+                        Status = Status.Unfrozen;
+                        ProcessFrozenListCommands();
+                        break;
 
-                case "Subscribe":
-                    SendSubscription(command[1]);
-                    break;
+                    case "Subscribe":
+                        SendSubscription(command[1]);
+                        break;
 
-                case "Unsubscribe":
-                    SendUnsubscription(command[1]);
-                    break;
+                    case "Unsubscribe":
+                        SendUnsubscription(command[1]);
+                        break;
 
-                default:
-                    Utility.DebugLog("Command: " + command[0] + " doesn't exist!");
-                    return false;
+                    default:
+                        Utility.DebugLog("Command: " + command[0] + " doesn't exist!");
+                        return false;
+                }
             }
+
             return true;
         }
 
@@ -125,12 +127,11 @@ namespace Subscriber
             bool emptyQueues = true;
             foreach (var queue in HoldbackQueue.Values)
             {
-                if (queue.GetSequenceNumbers() != null && queue.GetSequenceNumbers().Count !=0)
+                if (queue.GetSequenceNumbers() != null && queue.GetSequenceNumbers().Count != 0)
                 {
                     emptyQueues = false;
                     break;
                 }
-
             }
             // prints delayed messages in holdback queue
             if (HoldbackQueue.Keys.Count == 0 && emptyQueues)
@@ -161,7 +162,7 @@ namespace Subscriber
             // prints number of received message
             foreach (var pair in InSequenceNumbers)
             {
-                Console.Out.WriteLine("\t Received "+pair.Value+" messages from "+pair.Key);
+                Console.Out.WriteLine("\t Received " + pair.Value + " messages from " + pair.Key);
             }
             Console.Out.WriteLine("*******************\t\n");
         }
@@ -179,9 +180,7 @@ namespace Subscriber
             {
                 if (PublicationReceived(publisher, topic, publication, sequenceNumber))
                 {
-                    Utility.DEBUG = true;
                     Utility.DebugLog("Received publication '" + publication + "' with seq no " + sequenceNumber);
-                    Utility.DEBUG = false;
                     PublicationProcessed(publisher, topic, sequenceNumber);
                     Notify(publisher, topic, sequenceNumber);
                 }
@@ -189,7 +188,8 @@ namespace Subscriber
         }
 
         /// <summary>
-        /// 
+        ///     Notifies a broker of the last publication received after a certain time has passed
+        /// without any new messages
         /// </summary>
         private void Notify(string publisher, string topic, int sequenceNumber)
         {
@@ -363,11 +363,7 @@ namespace Subscriber
                                 {
                                     broker.ResendPublication(publisher, SiteName, sequenceNumber - 1, ProcessName);
                                     retry = false;
-                                } catch (RemotingException)
-                                {
-                                    DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
-                                }
-                                catch (SocketException)
+                                } catch (Exception)
                                 {
                                     DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
                                 }
@@ -407,7 +403,7 @@ namespace Subscriber
                 seqNo = ++OutSequenceNumber;
             }
 
-            Utility.DebugLog("Subscribing to topic "+topic+" with seq no "+seqNo);
+            Utility.DebugLog("Subscribing to topic " + topic + " with seq no " + seqNo);
             bool retry = true;
             while (retry)
             {

@@ -1,12 +1,14 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Net.Sockets;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Runtime.Serialization.Formatters;
 using CommonTypes;
+
+#endregion
 
 namespace Broker
 {
@@ -16,7 +18,7 @@ namespace Broker
         {
             if (args.Length != 5)
             {
-                Console.Out.WriteLine("Broker - Incorrect number of arguments: "+args.Length);
+                Console.Out.WriteLine("Broker - Incorrect number of arguments: " + args.Length);
                 Console.ReadLine();
                 return;
             }
@@ -24,10 +26,10 @@ namespace Broker
             string processName = args[0];
             string processUrl = args[1];
             string puppetMasterUrl = args[2];
-            string siteName= args[3];
+            string siteName = args[3];
             string parentSite = args[4];
 
-            Broker broker = new Broker(processName, processUrl, puppetMasterUrl, siteName,  parentSite);
+            Broker broker = new Broker(processName, processUrl, puppetMasterUrl, siteName, parentSite);
             BinaryServerFormatterSinkProvider serverProv = new BinaryServerFormatterSinkProvider();
             serverProv.TypeFilterLevel = TypeFilterLevel.Full;
 
@@ -50,8 +52,7 @@ namespace Broker
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
                 RemotingServices.Marshal(broker, prop["name"].ToString(), typeof (IBroker));
-            }
-            catch (Exception)
+            } catch (Exception)
             {
                 Console.Out.WriteLine("********************************************\r\n");
                 Console.Out.WriteLine("\tERROR: A problem occured while registering this service");

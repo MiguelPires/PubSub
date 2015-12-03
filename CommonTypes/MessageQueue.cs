@@ -1,7 +1,11 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+
+#endregion
 
 namespace Broker
 {
@@ -9,7 +13,7 @@ namespace Broker
     public class MessageQueue
     {
         private readonly IDictionary<int, string[]> _messages = new ConcurrentDictionary<int, string[]>();
-        
+
         public void Add(string[] message, int sequenceNumber)
         {
             this._messages[sequenceNumber] = message;
@@ -20,7 +24,7 @@ namespace Broker
             string[] message;
 
             if (this._messages.TryGetValue(sequenceNumber, out message))
-            { 
+            {
                 this._messages.Remove(sequenceNumber);
                 return message;
             }
@@ -30,7 +34,7 @@ namespace Broker
 
         public string[] GetFirstAndRemove()
         {
-            return GetAndRemove(_messages.Keys.Min());
+            return GetAndRemove(this._messages.Keys.Min());
         }
 
         public ICollection<int> GetSequenceNumbers()
@@ -42,6 +46,5 @@ namespace Broker
         {
             return this._messages.Count;
         }
-
     }
 }

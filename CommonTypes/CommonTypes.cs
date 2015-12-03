@@ -1,9 +1,12 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Broker;
+
+#endregion
 
 namespace CommonTypes
 {
@@ -95,12 +98,17 @@ namespace CommonTypes
     /// </summary>
     public interface IReplica
     {
-        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber, string deliverProcess);
-        void InformOfSubscription(string subscriber, string topic, string siteName, int sequenceNumber, string deliverProcess, IDictionary<string, int> state, IDictionary<string, MessageQueue> queue, IDictionary<string, IDictionary<string, int>> outSeqs);
+        void InformOfPublication(string publisher, string topic, string publication, string fromSite, int sequenceNumber,
+            string deliverProcess);
+
+        void InformOfSubscription(string subscriber, string topic, string siteName, int sequenceNumber, string deliverProcess,
+            IDictionary<string, int> state, IDictionary<string, MessageQueue> queue,
+            IDictionary<string, IDictionary<string, int>> outSeqs);
+
         void InformOfUnsubscription(string subscriber, string topic, string siteName, int sequenceNumber);
         void ResendPublication(string publisher, string requestingSite, int sequenceNumber, string subscriber = null);
         void ResendSubscription(string subscriber, string topic, int sequenceNumber);
-        void NotifyOfLast(string publisher, string askingSite, int sequenceNumber, string subscriber=null);
+        void NotifyOfLast(string publisher, string askingSite, int sequenceNumber, string subscriber = null);
     }
 
     public interface IPublisher : IProcess
@@ -123,7 +131,7 @@ namespace CommonTypes
         /// <summary>
         //      Enables or disables verbose printing of info 
         /// </summary>
-        public static bool DEBUG = false;
+        public static bool DEBUG = true;
 
         /// <summary>
         ///     Prints a message according to the debug variable
@@ -134,6 +142,7 @@ namespace CommonTypes
             if (DEBUG)
                 Console.Out.WriteLine(logMessage);
         }
+
         /// <summary>
         ///     Returns the port used for the PupperMaster at a given site
         /// </summary>
@@ -143,7 +152,7 @@ namespace CommonTypes
         {
             // the site's port is given by the sum of  8080 and the site number (e.g., 0 for site0)
             var a = Regex.Match(siteName, @"\d+").Value;
-            var siteNumber = Int32.Parse(a);
+            var siteNumber = int.Parse(a);
             return (8751 + siteNumber);
         }
 
@@ -189,9 +198,11 @@ namespace CommonTypes
 
             return true;
         }
+
         public delegate T ConnectFunction<T>(string url);
+
         /// <summary>
-        /// Tries to execute the connection function for maximumTries waiting sleepInterval (miliseconds) between each try
+        ///     Tries to execute the connection function for maximumTries waiting sleepInterval (miliseconds) between each try
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="connectionFunction">A connectFunction delegate </param>
@@ -199,14 +210,14 @@ namespace CommonTypes
         /// <param name="maximumTries">the number of tries</param>
         /// <param name="url">the url to connect</param>
         /// <returns></returns>
-        public static T TryConnection<T>(ConnectFunction<T> connectionFunction, string url, int maximumTries = 15,  int sleepInterval = -1)
+        public static T TryConnection<T>(ConnectFunction<T> connectionFunction, string url, int maximumTries = 15,
+            int sleepInterval = -1)
         {
             if (sleepInterval == -1)
             {
                 Random rand = new Random();
                 sleepInterval = rand.Next(100, 2000);
             }
-
 
             int retryCount = maximumTries;
 
@@ -217,20 +228,18 @@ namespace CommonTypes
                 {
                     result = connectionFunction(url);
                     break;
-                }
-                catch (Exception)
+                } catch (Exception)
                 {
                     retryCount--;
 
                     if (retryCount == 0)
                     {
-                        Console.Out.WriteLine("Error: Couldn't connect to "+url+" after " + maximumTries + " tries. ");
-                        throw; 
+                        Console.Out.WriteLine("Error: Couldn't connect to " + url + " after " + maximumTries + " tries. ");
+                        throw;
                     }
 
                     if (sleepInterval != 0)
                         System.Threading.Thread.Sleep(sleepInterval);
-
                 }
             }
             return result;

@@ -1,10 +1,12 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Windows.Forms;
 using CommonTypes;
+
+#endregion
 
 namespace PuppetMaster
 {
@@ -17,11 +19,17 @@ namespace PuppetMaster
         // this site's url
         public string Url { get; protected set; }
         // maps a process name to the process instance
-        public IDictionary<string, IProcess> LocalProcesses { get; protected set; } = new ConcurrentDictionary<string, IProcess>();
+        public IDictionary<string, IProcess> LocalProcesses { get; protected set; } = new ConcurrentDictionary<string, IProcess>()
+            ;
+
         // maps a process name to a process type - necessary to find the brokers
-        public IDictionary<string, ProcessType> LocalProcessesTypes { get; protected set; } = new ConcurrentDictionary<string, ProcessType>();
+        public IDictionary<string, ProcessType> LocalProcessesTypes { get; protected set; } =
+            new ConcurrentDictionary<string, ProcessType>();
+
         // maps a process name to it's url
-        public IDictionary<string, string> LocalProcessesUrls { get; protected set; } = new ConcurrentDictionary<string, string>();
+        public IDictionary<string, string> LocalProcessesUrls { get; protected set; } = new ConcurrentDictionary<string, string>()
+            ;
+
         // the logging setting
         public LoggingLevel LoggingLevel = LoggingLevel.Light;
         // the ordering setting
@@ -69,12 +77,12 @@ namespace PuppetMaster
         protected void LaunchProcess(string processName, string processType, string processUrl)
         {
             Console.WriteLine("Launching " + processName);
-           
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 UseShellExecute = true,
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
-                Arguments = processName + " " + processUrl + " " + Url+" " + SiteName
+                Arguments = processName + " " + processUrl + " " + Url + " " + SiteName
             };
 
             switch (processType)
@@ -106,7 +114,6 @@ namespace PuppetMaster
             Process.Start(startInfo);
             LocalProcesses[processName] = (IProcess) Activator.GetObject(typeof (IProcess), processUrl);
             LocalProcessesUrls[processName] = processUrl;
-
         }
 
         public override object InitializeLifetimeService()

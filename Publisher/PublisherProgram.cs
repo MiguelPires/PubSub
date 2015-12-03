@@ -1,20 +1,20 @@
-﻿using System;
+﻿#region
+
+using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Runtime.Serialization.Formatters;
-using System.Text;
-using System.Threading.Tasks;
 using CommonTypes;
+
+#endregion
 
 namespace Publisher
 {
-    class PublisherProgram
+    internal class PublisherProgram
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             if (args.Length != 4)
             {
@@ -51,16 +51,15 @@ namespace Publisher
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
                 RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof (IPublisher));
-            }
-            catch (Exception)
+            } catch (Exception)
             {
                 Console.Out.WriteLine("********************************************\r\n");
                 Console.Out.WriteLine("\tERROR: A problem occured while registering this service");
                 Console.Out.WriteLine("\r\n********************************************");
                 Console.ReadLine();
             }
-            
-            Console.WriteLine(@"Running " + processName+ " at " + processUrl + " - " + site );
+
+            Console.WriteLine(@"Running " + processName + " at " + processUrl + " - " + site);
             Console.ReadLine();
         }
     }

@@ -140,7 +140,7 @@ namespace CommonTypes
         public static void DebugLog(string logMessage)
         {
             if (DEBUG)
-                Console.Out.WriteLine(logMessage);
+                    Console.Out.WriteLine(logMessage);
         }
 
         /// <summary>

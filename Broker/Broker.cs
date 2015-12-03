@@ -2255,21 +2255,21 @@ namespace Broker
         {
             Console.Out.WriteLine("**** Status *****");
             if (RoutingTable.Keys.Count == 0)
-                Console.Out.WriteLine("\tThere are no subscriptions");
+                Console.Out.WriteLine("*\tThere are no subscriptions");
 
             foreach (KeyValuePair<string, SubscriptionSet> entry in RoutingTable)
             {
                 SubscriptionSet set = entry.Value;
                 foreach (KeyValuePair<string, string> process in set.Processes)
-                    Console.Out.WriteLine("\t" + process.Key + " is subscribed to " + entry.Key);
+                    Console.Out.WriteLine("*\t" + process.Key + " is subscribed to " + entry.Key);
             }
 
             if (HoldbackQueue.Keys.Count == 0)
-                Console.Out.WriteLine("\tThere are no messages in the hold-back queue");
+                Console.Out.WriteLine("*\tThere are no messages in the hold-back queue");
 
             foreach (KeyValuePair<string, MessageQueue> messageQueue in HoldbackQueue)
             {
-                Console.Out.WriteLine("There are " + messageQueue.Value.GetCount() + " messages in queue for " +
+                Console.Out.WriteLine("*\tThere are " + messageQueue.Value.GetCount() + " messages in queue for " +
                                       messageQueue.Key);
             }
             Console.Out.WriteLine("*******************\t\n");

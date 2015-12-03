@@ -11,13 +11,13 @@ namespace PuppetMaster
 {
     public partial class InteractionForm : Form
     {
-        private readonly IPuppetMasterMaster master;
+        private readonly IPuppetMasterMaster _master;
 
         public InteractionForm(PuppetMasterMaster master, string siteName)
         {
-            this.master = master;
-            Text = "Command - " + siteName;
             InitializeComponent();
+            this._master = master;
+            Text = "Command - " + siteName;
             this.IndividualBox.KeyDown += iKeyDown;
             this.GroupBox.KeyDown += gKeyDown;
         }
@@ -45,6 +45,8 @@ namespace PuppetMaster
             this.logBox.AppendText(message.Trim() + "\r\n");
             this.logBox.Select(start, end);
             this.logBox.SelectionColor = Color.Black;
+            logBox.SelectionStart = logBox.Text.Length;
+            logBox.ScrollToCaret();
         }
 
         private void textBox1_TextChanged(object sender, EventArgs e)
@@ -66,7 +68,7 @@ namespace PuppetMaster
             string command = this.IndividualBox.Text;
             try
             {
-                this.master.SendCommand(command.Trim());
+                this._master.SendCommand(command.Trim());
                 this.logBox.AppendText(this.IndividualBox.Text + "\r\n");
                 this.logBox.Select(start, end);
                 this.logBox.SelectionColor = Color.Black;
@@ -78,6 +80,8 @@ namespace PuppetMaster
                 this.logBox.SelectionColor = Color.Red;
             }
             this.IndividualBox.Clear();
+            logBox.SelectionStart = logBox.Text.Length;
+            logBox.ScrollToCaret();
         }
 
         private void GroupBox_TextChanged(object sender, EventArgs e)
@@ -99,24 +103,10 @@ namespace PuppetMaster
                 int start = this.logBox.Text.Length;
                 int end = start + line.Length;
                 this.logBox.AppendText(line + "\r\n");
-
-                /* string[] tokens = line.Split(' ');
-                if (tokens[0].Equals("Wait"))
-                {
-                    if (tokens.Length != 2)
-                    {
-                        logBox.Select(start, end);
-                        logBox.SelectionColor = Color.Red;
-                        continue;
-                    }
-                    int numVal = Int32.Parse(tokens[1]);
-                    Thread.Sleep(numVal);
-                }
-                else
-                {*/
                 try
                 {
-                    this.master.SendCommand(line);
+                    this._master.SendCommand(line);
+                    Console.Out.WriteLine("C - "+line);
                 } catch (CommandParsingException ex)
                 {
                     Console.Out.WriteLine(ex.Message);
@@ -131,6 +121,8 @@ namespace PuppetMaster
             }
 
             this.GroupBox.Clear();
+            logBox.SelectionStart = logBox.Text.Length;
+            logBox.ScrollToCaret();
         }
     }
 }

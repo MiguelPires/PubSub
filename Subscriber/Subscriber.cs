@@ -136,10 +136,10 @@ namespace Subscriber
             // prints delayed messages in holdback queue
             if (HoldbackQueue.Keys.Count == 0 && emptyQueues)
             {
-                Console.Out.WriteLine("\t There are no delayed publications");
+                Console.Out.WriteLine("*\t There are no delayed publications");
             } else
             {
-                Console.Out.WriteLine("\tPublications in HoldBack queue: ");
+                Console.Out.WriteLine("*\tPublications in HoldBack queue: ");
                 foreach (string pub in HoldbackQueue.Keys)
                 {
                     MessageQueue queue = HoldbackQueue[pub];
@@ -148,7 +148,7 @@ namespace Subscriber
                     if (seqNums.Count == 0)
                         continue;
 
-                    Console.Out.Write("\tPublisher '" + pub + "' has messages ");
+                    Console.Out.Write("*\tPublisher '" + pub + "' has messages ");
 
                     foreach (int seqNum in queue.GetSequenceNumbers())
                     {
@@ -162,7 +162,7 @@ namespace Subscriber
             // prints number of received message
             foreach (var pair in InSequenceNumbers)
             {
-                Console.Out.WriteLine("\t Received " + pair.Value + " messages from " + pair.Key);
+                Console.Out.WriteLine("*\t Received " + pair.Value + " messages from " + pair.Key);
             }
             Console.Out.WriteLine("*******************\t\n");
         }

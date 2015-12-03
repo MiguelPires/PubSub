@@ -76,7 +76,7 @@ namespace Publisher
                     base.DeliverCommand(command);
                     lock (this)
                     {
-                        Console.Out.WriteLine("\tSequence Number: " + OutSequenceNumber);
+                        Console.Out.WriteLine("*\tSequence Number: " + OutSequenceNumber);
                     }
                     Console.Out.WriteLine("*******************\t\n");
                     break;
@@ -103,6 +103,13 @@ namespace Publisher
             return true;
         }
 
+        /// <summary>
+        ///     Send a publication. The sequence number may be specified (for resending) or not
+        /// (for first time publication)
+        /// </summary>
+        /// <param name="topic"></param>
+        /// <param name="publication"></param>
+        /// <param name="sequenceNumber"></param>
         public void SendPublication(string topic, string publication, int sequenceNumber = -1)
         {
             int seqNo;
@@ -148,6 +155,10 @@ namespace Publisher
             }).Start();
         }
 
+        /// <summary>
+        ///     Serve a request for a specific publication
+        /// </summary>
+        /// <param name="sequenceNumber"></param>
         public void RequestPublication(int sequenceNumber)
         {
             string[] message = History.GetMessage(sequenceNumber);
@@ -200,6 +211,13 @@ namespace Publisher
             return true;
         }
 
+        /// <summary>
+        ///     Receives a notification of the last publication received by someone. If this is not
+        /// the last publication, then resend what's missing.
+        /// </summary>
+        /// <param name="publisher"></param>
+        /// <param name="fromSite"></param>
+        /// <param name="sequenceNumber"></param>
         public void NotifyOfLast(string publisher, string fromSite, int sequenceNumber)
         {
             if (OutSequenceNumber > sequenceNumber)

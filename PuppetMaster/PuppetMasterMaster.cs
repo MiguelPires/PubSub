@@ -146,6 +146,7 @@ namespace PuppetMaster
                                 {
                                     try
                                     {
+
                                         proc.DeliverCommand(new[] {command[1]});
                                     } catch (Exception ex)
                                     {
@@ -170,27 +171,37 @@ namespace PuppetMaster
                                 Array.Copy(command, 1, processArgs, 0, command.Length - 1);
                                 IProcess process = LocalProcesses[processName];
 
-                                try
+                                new Thread(() =>
                                 {
-                                    process.DeliverCommand(processArgs);
-                                } catch (Exception ex)
-                                {
-                                    // the crash command is supposed to generate an exception
-                                    if (!processArgs[0].Equals("Crash"))
-                                        Utility.DebugLog("WARNING: " + ex.Message);
-                                }
+                                    try
+                                    {
+                                        process.DeliverCommand(processArgs);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // the crash command is supposed to generate an exception
+                                        if (!processArgs[0].Equals("Crash"))
+                                            Utility.DebugLog("WARNING: " + ex.Message);
+                                    }
+                                }).Start();
+                                
                             } else
                             {
-                                try
+                                new Thread(() =>
                                 {
-                                    Slaves[site].DeliverCommand(command);
-                                } catch (Exception ex)
-                                {
-                                    if (!command[0].Equals("Crash"))
-                                        Utility.DebugLog("WARNING: " + ex.Message);
-                                }
+                                    try
+                                    {
+                                        Slaves[site].DeliverCommand(command);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        if (!command[0].Equals("Crash"))
+                                            Utility.DebugLog("WARNING: " + ex.Message);
+                                    }
+                                }).Start();
                             }
                         }
+
                     } else
                         Monitor.Wait(this.CommandQueue);
                 }

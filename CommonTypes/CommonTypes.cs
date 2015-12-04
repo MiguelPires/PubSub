@@ -124,14 +124,14 @@ namespace CommonTypes
     }
 
     /// <summary>
-    /// A library of useful functions shared between various entities
+    /// A shared library composed of several useful functions
     /// </summary>
     public class Utility
     {
         /// <summary>
         //      Enables or disables verbose printing of info 
         /// </summary>
-        public static bool DEBUG = true;
+        public static bool DEBUG = false;
 
         /// <summary>
         ///     Prints a message according to the debug variable
@@ -140,7 +140,7 @@ namespace CommonTypes
         public static void DebugLog(string logMessage)
         {
             if (DEBUG)
-                    Console.Out.WriteLine(logMessage);
+                Console.Out.WriteLine(logMessage);
         }
 
         /// <summary>

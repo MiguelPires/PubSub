@@ -1,0 +1,12 @@
+Subscriber subscriber2 Subscribe /p/*
+Subscriber subscriber1 Subscribe /p/a
+Wait 2000
+Publisher publisher00 Publish 20 Ontopic /p/a Interval 0
+Publisher publisher00 Publish 20 Ontopic /p/b Interval 0
+Publisher publisher01 Publish 20 Ontopic /p/a Interval 0
+Publisher publisher01 Publish 20 Ontopic /p/b Interval 0
+Wait 30000 
+Status
+Subscriber subscriber1 Unsubscribe /p/a
+Wait 3000
+Status

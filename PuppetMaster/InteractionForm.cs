@@ -49,14 +49,6 @@ namespace PuppetMaster
             logBox.ScrollToCaret();
         }
 
-        private void textBox1_TextChanged(object sender, EventArgs e)
-        {
-        }
-
-        private void richTextBox2_TextChanged(object sender, EventArgs e)
-        {
-        }
-
         private void IndividualButton_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(this.IndividualBox.Text))
@@ -84,10 +76,6 @@ namespace PuppetMaster
             logBox.ScrollToCaret();
         }
 
-        private void GroupBox_TextChanged(object sender, EventArgs e)
-        {
-        }
-
         private void GroupButton_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(this.GroupBox.Text))
@@ -106,7 +94,6 @@ namespace PuppetMaster
                 try
                 {
                     this._master.SendCommand(line);
-                    Console.Out.WriteLine("C - "+line);
                 } catch (CommandParsingException ex)
                 {
                     Console.Out.WriteLine(ex.Message);
@@ -114,7 +101,6 @@ namespace PuppetMaster
                     this.logBox.SelectionColor = Color.Red;
                     continue;
                 }
-                //   }
 
                 this.logBox.Select(start, end);
                 this.logBox.SelectionColor = Color.Black;
@@ -123,6 +109,18 @@ namespace PuppetMaster
             this.GroupBox.Clear();
             logBox.SelectionStart = logBox.Text.Length;
             logBox.ScrollToCaret();
+        }
+
+        private void GroupBox_TextChanged(object sender, EventArgs e)
+        {
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+        }
+
+        private void richTextBox2_TextChanged(object sender, EventArgs e)
+        {
         }
     }
 }

@@ -51,14 +51,14 @@ namespace Publisher
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
                 RemotingServices.Marshal(publisher, prop["name"].ToString(), typeof (IPublisher));
-            } catch (Exception)
+            } catch (Exception ex)
             {
-                Console.Out.WriteLine("********************************************\r\n");
-                Console.Out.WriteLine("\tERROR: A problem occured while registering this service");
-                Console.Out.WriteLine("\r\n********************************************");
+                Console.Out.WriteLine("********************************************");
+                Console.Out.WriteLine("*\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("*\t" + ex.Message);
+                Console.Out.WriteLine("*********************************************");
                 Console.ReadLine();
             }
-
             Console.WriteLine(@"Running " + processName + " at " + processUrl + " - " + site);
             Console.ReadLine();
         }

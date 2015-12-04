@@ -42,9 +42,19 @@ namespace PuppetMaster
             prop["port"] = port;
             prop["name"] = siteName;
 
-            TcpChannel channel = new TcpChannel(prop, null, serverProv);
-            ChannelServices.RegisterChannel(channel, false);
-            RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof (IPuppetMasterSlave));
+            try
+            {
+                TcpChannel channel = new TcpChannel(prop, null, serverProv);
+                ChannelServices.RegisterChannel(channel, false);
+                RemotingServices.Marshal(puppet, prop["name"].ToString(), typeof (IPuppetMasterSlave));
+            } catch (Exception ex)
+            {
+                Console.Out.WriteLine("********************************************");
+                Console.Out.WriteLine("*\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("*\t" + ex.Message);
+                Console.Out.WriteLine("*********************************************");
+                Console.ReadLine();
+            }
 
             string url = "tcp://localhost:" + port + "/" + siteName;
             Console.WriteLine(@"Running a " + puppet + " at " + url);
@@ -72,9 +82,19 @@ namespace PuppetMaster
             prop["port"] = port;
             prop["name"] = siteName;
 
-            TcpChannel channel = new TcpChannel(prop, null, serverProv);
-            ChannelServices.RegisterChannel(channel, false);
-            RemotingServices.Marshal(master, prop["name"].ToString(), typeof (IPuppetMasterMaster));
+            try
+            {
+                TcpChannel channel = new TcpChannel(prop, null, serverProv);
+                ChannelServices.RegisterChannel(channel, false);
+                RemotingServices.Marshal(master, prop["name"].ToString(), typeof (IPuppetMasterMaster));
+            } catch (Exception ex)
+            {
+                Console.Out.WriteLine("********************************************");
+                Console.Out.WriteLine("*\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("*\t" + ex.Message);
+                Console.Out.WriteLine("*********************************************");
+                Console.ReadLine();
+            }
 
             Console.Out.WriteLine("**Config:**");
             Console.Out.WriteLine("OrderingGuarantee: {0}", master.OrderingGuarantee);

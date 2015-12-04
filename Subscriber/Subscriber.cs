@@ -35,12 +35,13 @@ namespace Subscriber
             : base(processName, processUrl, puppetMasterUrl, siteName)
         {
             List<string> brokerUrls = GetBrokers(puppetMasterUrl);
+            int smallestPort = int.MaxValue;
 
             // connect to the brokers at the site
             foreach (string brokerUrl in brokerUrls)
             {
-                int port, smallestPort = int.MaxValue;
                 string name;
+                int port;
                 Utility.DivideUrl(brokerUrl, out port, out name);
 
                 Utility.ConnectFunction<IBroker> fun = (string url) =>
@@ -134,7 +135,7 @@ namespace Subscriber
                 }
             }
             // prints delayed messages in holdback queue
-            if (HoldbackQueue.Keys.Count == 0 && emptyQueues)
+            if (HoldbackQueue.Keys.Count == 0 || emptyQueues)
             {
                 Console.Out.WriteLine("*\t There are no delayed publications");
             } else
@@ -197,7 +198,7 @@ namespace Subscriber
             {
                 new Thread(() =>
                 {
-                    Thread.Sleep(5000);
+                    Thread.Sleep(3000);
                     int seqNo;
 
                     // checks if this sequence number is the last one
@@ -209,11 +210,11 @@ namespace Subscriber
                         if (HoldbackQueue.TryGetValue(publisher, out checkQueue) && checkQueue.GetSequenceNumbers().Any())
                             return;
 
+                        // if we unsubbed from the topic, we don't want to receive anything else
                         List<string> pubs;
                         if (!Topics.TryGetValue(topic, out pubs))
-                        {
                             return;
-                        }
+
                         bool retry = true;
                         while (retry)
                         {
@@ -222,12 +223,13 @@ namespace Subscriber
                                 {
                                     try
                                     {
-                                        DesignatedBroker.NotifyOfLast(publisher, SiteName, sequenceNumber, ProcessName);
+                                        IBroker broker = Brokers[this.Random.Next(0, Brokers.Count)];
+                                        broker.NotifyOfLast(publisher, SiteName, sequenceNumber, ProcessName);
                                         Utility.DebugLog("Notifying of last pub with seq no " + sequenceNumber);
                                         retry = false;
                                     } catch (Exception)
                                     {
-                                        DesignatedBroker = Brokers[this.Random.Next(0, Brokers.Count)];
+                                        Utility.DebugLog("WARNING: Failed notification for seq no "+sequenceNumber+". Retrying.");
                                     }
                                 });
                             subThread.Start();
@@ -250,6 +252,17 @@ namespace Subscriber
                 seqNum = 0;
                 InSequenceNumbers[publisher] = 0;
             }
+
+            List<string> publishers;
+            if (!Topics.TryGetValue(topic, out publishers))
+            {
+                publishers = new List<string> {publisher};
+            } else if (!publishers.Contains(publisher))
+            {
+                publishers.Add(publisher);
+            }
+
+            Topics[topic] = publishers;
 
             // we queue if the ordering is incorrect or we're frozen
             if (sequenceNumber > seqNum + 1 || Status == Status.Frozen)
@@ -315,10 +328,17 @@ namespace Subscriber
         private void PublicationProcessed(string publisher, string topic, int sequenceNumber)
         {
             InSequenceNumbers[publisher] = sequenceNumber;
-            Thread thread =
-                new Thread(
-                    () => PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + publisher + ", " + topic));
-            thread.Start();
+            new Thread(
+                () =>
+                {
+                    try
+                    {
+                        PuppetMaster.DeliverLog("SubEvent " + ProcessName + ", " + publisher + ", " + topic);
+                    } catch (Exception)
+                    {
+                        Utility.DebugLog("WARNING: " + ProcessName + " couldn't deliver log");
+                    }
+                }).Start();
 
             MessageQueue queue;
             if (HoldbackQueue.TryGetValue(publisher, out queue))
@@ -328,9 +348,8 @@ namespace Subscriber
                     return;
                 Utility.DebugLog("Unblocking publication with seq " + (sequenceNumber + 1));
 
-                thread = new Thread(
-                    () => DeliverPublication(message[0], message[1], message[2], sequenceNumber + 1));
-                thread.Start();
+                new Thread(
+                    () => DeliverPublication(message[0], message[1], message[2], sequenceNumber + 1)).Start();
             }
         }
 

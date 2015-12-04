@@ -19,7 +19,7 @@ namespace Publisher
         // the sequence number used by messages sent to the broker group
         public int OutSequenceNumber { get; private set; }
         //
-        public int EventNumber { get; private set; } = 1;
+        public IDictionary<string, int> EventNumber { get; private set; } = new Dictionary<string, int>();
         // the sent publications
         public ProcessHistory History { get; } = new ProcessHistory();
 
@@ -165,6 +165,7 @@ namespace Publisher
             if (message == null)
                 return;
 
+            Utility.DebugLog("Resending publication with seq no "+sequenceNumber);
             SendPublication(message[0], message[1], sequenceNumber);
         }
 
@@ -187,16 +188,26 @@ namespace Publisher
                 return false;
             }
 
+            // TODO: verificar que os event numbers estao minimamente consistentes com os seq nos
+            // TODO: compilar no Debug e no Release
+            // TODO: zip e entregar
             for (int i = 0; i < numberOfEvents; i++)
             {
-                string content;
                 lock (this)
                 {
-                    content = ProcessName + "-" + topic + "-" + EventNumber;
-                    ++EventNumber;
+                    int eventNumber;
+                    if (!EventNumber.TryGetValue(topic, out eventNumber))
+                        eventNumber = 1;
+
+                    string content = ProcessName + "-" + topic + "-" + eventNumber;
+
+                    ++eventNumber;
+                    EventNumber[topic] = eventNumber;
+
+                    SendPublication(topic, content);
+                    Utility.DebugLog("Publishing '" + content + "' with seq no " + OutSequenceNumber);
                 }
-                Utility.DebugLog("Publishing '" + content + "' on topic " + topic);
-                SendPublication(topic, content);
+
                 new Thread(() =>
                 {
                     try

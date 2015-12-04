@@ -232,7 +232,7 @@ namespace Broker
 
                     if (deliverProcess.Equals(ProcessName))
                     {
-                        Utility.DebugLog("Processing publication " + sequenceNumber);
+                        Utility.DebugLog("Processing publication " + publication + " with seq no " + sequenceNumber);
                         ProcessPublication(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
                     } else
                     {
@@ -246,18 +246,16 @@ namespace Broker
                         // multicast the publication
                         foreach (var broker in SiblingBrokers)
                         {
-                            Thread thread =
-                                new Thread(() =>
+                            new Thread(() =>
+                            {
+                                try
                                 {
-                                    try
-                                    {
-                                        broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
-                                            deliverProcess);
-                                    } catch (Exception)
-                                    {
-                                    }
-                                });
-                            thread.Start();
+                                    broker.InformOfPublication(publisher, topic, publication, fromSite, sequenceNumber,
+                                        deliverProcess);
+                                } catch (Exception)
+                                {
+                                }
+                            }).Start();
                         }
                     }
                 }
@@ -693,8 +691,17 @@ namespace Broker
                             {
                                 new Thread(
                                     () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                topic)).Start();
+                                    {
+                                        try
+                                        {
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic);
+                                        } catch (Exception)
+                                        {
+                                            Utility.DebugLog("WARNING: " + ProcessName + " couldn't deliver log");
+                                        }
+                                    }
+                                    ).Start();
                             }
 
                             Thread thread = new Thread(() =>
@@ -858,10 +865,10 @@ namespace Broker
                     {
                         while (true)
                         {
-                            // waits half a second before checking the queue. if the minimum sequence
+                            // waits a bit before checking the queue. if the minimum sequence
                             // number is this one, then our message didn't arrive and it's the one blocking 
                             // the queue. In that case, we request it
-                            Thread.Sleep(500);
+                            Thread.Sleep(1500);
                             lock (HoldbackQueue)
                             {
                                 MessageQueue checkQueue;
@@ -974,14 +981,6 @@ namespace Broker
 
             lock (ProcessLocks[publisher])
             {
-                // if we don't care about ordering and we receive directly from a broker
-                // then we just assign it a seq no and stop because there won't be any delayed messages
-                /*    if (OrderingGuarantee == OrderingGuarantee.No && fromSite.Equals(SiteName))
-                {
-                    ++InSequenceNumbers[publisher];
-                    return;
-                }*/
-
                 InSequenceNumbers[publisher] = sequenceNumber;
 
                 MessageQueue queue;
@@ -1029,7 +1028,7 @@ namespace Broker
                     //Utility.DebugLog("No pub stored for " + publisher + " with seq no " + sequenceNumber);
                     throw new NotFoundException("No publication was found for pub " + publisher + " with seq no " + sequenceNumber);
                 }
-                Utility.DebugLog("Resending message " + message[2] + " with seq no " + int.Parse(message[4]));
+                Utility.DebugLog("Resending message " + message[2] + " with seq no " + sequenceNumber);
 
                 Thread thread;
                 // in this case, a subscriber requested a resend
@@ -1047,7 +1046,7 @@ namespace Broker
                     {
                         try
                         {
-                            sub.DeliverPublication(message[0], message[1], message[2], int.Parse(message[4]));
+                            sub.DeliverPublication(message[0], message[1], message[2], sequenceNumber);
                         } catch (Exception)
                         {
                         }
@@ -1071,6 +1070,8 @@ namespace Broker
                 {
                     PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                             message[1]);
+
+                    // TODO: por threads nestas deliveries
                     /*thread =
                         new Thread(
                             () =>
@@ -1100,7 +1101,7 @@ namespace Broker
                                     try
                                     {
                                         broker.DeliverPublication(message[0], message[1], message[2], message[3],
-                                            int.Parse(message[4]));
+                                            sequenceNumber);
                                         retry = false;
                                     } catch (Exception)
                                     {
@@ -1233,8 +1234,6 @@ namespace Broker
 
                 string fromSite = messageInfo[3];
 
-                Utility.DebugLog("Sending up the chain");
-
                 // TODO: when the notif arrives at site0 it somehow goes unnoticed
                 // check for lost messages up the chain 
                 if (fromSite.Equals(SiteName))
@@ -1287,18 +1286,14 @@ namespace Broker
                 } else
                 {
                     List<IBroker> brokerList = null;
-                    Utility.DebugLog("Notif: Site is " + fromSite);
                     if (ParentSite.Equals(fromSite))
                     {
-                        Utility.DebugLog("ASK PARENT");
                         lock (ParentBrokers)
                         {
                             brokerList = ParentBrokers;
                         }
                     } else
                     {
-                        Utility.DebugLog("ASK CHILD");
-
                         if (!Children.TryGetValue(fromSite, out brokerList))
                             return;
                     }
@@ -1515,12 +1510,13 @@ namespace Broker
                                 bool retry = true;
                                 while (retry)
                                 {
-                                      Thread subThread =
+                                    Thread subThread =
                                         new Thread(() =>
                                         {
                                             try
                                             {
-                                                DesignatedBrokers[child.Key].DeliverSubscription(subscriber, topic, SiteName, sequenceNumber);
+                                                DesignatedBrokers[child.Key].DeliverSubscription(subscriber, topic, SiteName,
+                                                    sequenceNumber);
                                                 retry = false;
                                             } catch (Exception)
                                             {
@@ -1551,7 +1547,8 @@ namespace Broker
                                 {
                                     try
                                     {
-                                        DesignatedBrokers[ParentSite].DeliverSubscription(subscriber, topic, SiteName, sequenceNumber);
+                                        DesignatedBrokers[ParentSite].DeliverSubscription(subscriber, topic, SiteName,
+                                            sequenceNumber);
                                         retry = false;
                                     } catch (Exception)
                                     {
@@ -2150,14 +2147,12 @@ namespace Broker
 
         public void AddSiblingBroker(string siblingUrl)
         {
-            Utility.DebugLog("Received sibling " + siblingUrl);
             IBroker sibling = (IBroker) Activator.GetObject(typeof (IBroker), siblingUrl);
 
             try
             {
                 sibling.Ping();
-            }
-            catch (Exception)
+            } catch (Exception)
             {
                 Utility.DebugLog("\tERROR: The sibling broker " + siblingUrl + " is down.");
                 return;
@@ -2167,8 +2162,9 @@ namespace Broker
             {
                 SiblingBrokers.Add(sibling);
             }
-        }
 
+            Console.WriteLine("Received sibling " + siblingUrl);
+        }
 
         /// <summary>
         ///     Delivers a command.

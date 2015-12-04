@@ -29,7 +29,19 @@ namespace PuppetMaster
             this.SiteProcesses = new Dictionary<string, string>();
             BrokersStartup = new List<string[]>();
 
-            StreamReader reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "/master.config");
+            // assuming the config file is in the root directory
+            StreamReader reader = null;
+            try
+            {
+                reader = File.OpenText(AppDomain.CurrentDomain.BaseDirectory + "../../../master.config");
+            } catch (Exception ex)
+            {
+                Console.Out.WriteLine("********************************************");
+                Console.Out.WriteLine("*\tERROR: Couldn't find the configuration file");
+                Console.Out.WriteLine("*\t" + ex.Message);
+                Console.Out.WriteLine("*********************************************");
+                Console.ReadLine();
+            }
 
             string line;
             while ((line = reader.ReadLine()) != null)
@@ -87,7 +99,13 @@ namespace PuppetMaster
                     if (this.LogQueue.TryDequeue(out logMessage))
                     {
                         this.eventNumber++;
-                        Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+                        try
+                        {
+                            Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+                        } catch (Exception)
+                        {
+                            Utility.DebugLog("WARNING: The GUI was terminated (or is otherwise unaccessible).");
+                        }
                     } else
                     {
                         Monitor.Wait(this.LogQueue);

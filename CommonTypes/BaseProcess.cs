@@ -75,7 +75,7 @@ namespace CommonTypes
                 switch (command[0])
                 {
                     case "Status":
-                        Console.Out.WriteLine("**** Status ********\t\n");
+                        Console.Out.WriteLine("**** Status ********");
                         break;
 
                     case "Crash":

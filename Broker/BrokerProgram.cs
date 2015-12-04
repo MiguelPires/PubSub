@@ -52,12 +52,12 @@ namespace Broker
                 TcpChannel channel = new TcpChannel(prop, null, serverProv);
                 ChannelServices.RegisterChannel(channel, false);
                 RemotingServices.Marshal(broker, prop["name"].ToString(), typeof (IBroker));
-            } catch (Exception)
+            } catch (Exception ex)
             {
-                Console.Out.WriteLine("********************************************\r\n");
-                Console.Out.WriteLine("\tERROR: A problem occured while registering this service");
-                Console.Out.WriteLine("\r\n********************************************");
-
+                Console.Out.WriteLine("********************************************");
+                Console.Out.WriteLine("*\tERROR: A problem occured while registering this service");
+                Console.Out.WriteLine("*\t" + ex.Message);
+                Console.Out.WriteLine("*********************************************");
                 Console.ReadLine();
             }
 

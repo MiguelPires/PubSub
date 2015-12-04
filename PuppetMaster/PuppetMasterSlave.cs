@@ -49,7 +49,14 @@ namespace PuppetMaster
                                 Utility.DebugLog(ex.Message);
                             }
                         }).Start();
-                        Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+
+                        try
+                        {
+                            Form.Invoke(LogDelegate, logMessage + ", " + this.eventNumber);
+                        } catch (Exception)
+                        {
+                            Utility.DebugLog("WARNING: The GUI was terminated (or is otherwise unaccessible).");
+                        }
                     } else
                     {
                         Monitor.Wait(this.LogQueue);

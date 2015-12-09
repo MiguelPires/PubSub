@@ -2,7 +2,7 @@
 **Author:** Miguel Pires <br/>
 **Email:** miguel.pires@tecnico.ulisboa.pt
 
-## Configuration file
+### Configuration file
 
 The configuration file 'master.config' is located in the root directory (where it
 should remain in order for the program to execute). This particular config file
@@ -18,7 +18,7 @@ looks like this:
 There are two publishers in the site0 and two subscribers in site1 and site2 (one
 in each).
 
-## Launching consoles
+### Launching consoles
 
 To launch a "slave" site just type the following in a shell in the root directory 
 (the SESDAD folder):
@@ -37,7 +37,7 @@ $ PuppetMaster/bin/Debug/PuppetMaster.exe -m site0
 The presence of the '-m' flag indicates the site where the PuppetMaster"Master" 
 should be located. Any other site will have a PuppetMaster"Slave".
 
-## Inserting commands
+### Inserting commands
 
 An example script 'script.txt' is also located in the root directory and subscribes the two
 subscribers, subscriber2 and subscriber1, to topics '/p/\*' and '/p/a', respectively. Then
@@ -56,7 +56,7 @@ every process console says "Running a <process-name> at <url> - <site>". Brokers
 display two "Received sibling ..." messages that mean the broker has been informed of who are it's
 neighbouring brokers (the other brokers in it's site).
 
-## GUI
+### GUI
 
 For the PuppetMasterMaster UI, there is an input box for individual commands, 
 another for batch commands and a log for the triggered events. Wrong commands 

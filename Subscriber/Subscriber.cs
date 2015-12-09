@@ -229,7 +229,8 @@ namespace Subscriber
                                         retry = false;
                                     } catch (Exception)
                                     {
-                                        Utility.DebugLog("WARNING: Failed notification for seq no "+sequenceNumber+". Retrying.");
+                                        Utility.DebugLog("WARNING: Failed notification for seq no " + sequenceNumber +
+                                                         ". Retrying.");
                                     }
                                 });
                             subThread.Start();

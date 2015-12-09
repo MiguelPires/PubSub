@@ -222,7 +222,6 @@ namespace Broker
                         return;
                     }
 
-                    // TODO: refactor this as in the InformOfSubscription
                     MessageQueue queue;
                     if (HoldbackQueue.TryGetValue(publisher, out queue))
                     {
@@ -240,7 +239,6 @@ namespace Broker
                         StorePublicationInHistory(publisher, topic, publication, fromSite, sequenceNumber, deliverProcess);
                     }
 
-                    // TODO: remover este lock
                     lock (SiblingBrokers)
                     {
                         // multicast the publication
@@ -550,10 +548,14 @@ namespace Broker
                             // send log
                             if (this.LoggingLevel == LoggingLevel.Full)
                             {
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                topic)).Start();
+                                try
+                                {
+                                    new Thread(
+                                        () =>
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic)).Start();
+                                } catch(Exception) { }
+                                
                             }
                             Thread thread = new Thread(() =>
                             {
@@ -608,9 +610,13 @@ namespace Broker
 
                         if (this.LoggingLevel == LoggingLevel.Full)
                         {
-                            new Thread(
-                                () =>
-                                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic)).Start();
+                            try
+                            {
+                                new Thread(
+                                    () =>
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic)).Start();
+                            }catch(Exception) { }
+                            
                         }
 
                         Thread thread = new Thread(() =>
@@ -697,9 +703,7 @@ namespace Broker
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                                     topic);
                                         } catch (Exception)
-                                        {
-                                            Utility.DebugLog("WARNING: " + ProcessName + " couldn't deliver log");
-                                        }
+                                        {}
                                     }
                                     ).Start();
                             }
@@ -757,10 +761,15 @@ namespace Broker
                             // send log
                             if (this.LoggingLevel == LoggingLevel.Full)
                             {
-                                new Thread(
-                                    () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                                                topic)).Start();
+                                try
+                                {
+                                    new Thread(
+                                        () =>
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    topic)).Start();
+                                } catch (Exception)
+                                {}
+
                             }
 
                             Thread thread = new Thread(() =>
@@ -875,7 +884,14 @@ namespace Broker
                                 if (HoldbackQueue.TryGetValue(publisher, out checkQueue) &&
                                     checkQueue.GetSequenceNumbers().Any())
                                 {
-                                    int minSeqNo = checkQueue.GetSequenceNumbers().Min();
+                                    int minSeqNo;
+                                    try
+                                    {
+                                        minSeqNo = checkQueue.GetSequenceNumbers().Min();
+                                    } catch (Exception)
+                                    {
+                                        return;
+                                    }
                                     if (minSeqNo == sequenceNumber)
                                     {
                                         RequestPublication(publisher, fromSite, sequenceNumber - 1);
@@ -1025,7 +1041,6 @@ namespace Broker
 
                 if (message == null)
                 {
-                    //Utility.DebugLog("No pub stored for " + publisher + " with seq no " + sequenceNumber);
                     throw new NotFoundException("No publication was found for pub " + publisher + " with seq no " + sequenceNumber);
                 }
                 Utility.DebugLog("Resending message " + message[2] + " with seq no " + sequenceNumber);
@@ -1068,16 +1083,12 @@ namespace Broker
 
                 if (this.LoggingLevel == LoggingLevel.Full)
                 {
-                    PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
-                                            message[1]);
-
-                    // TODO: por threads nestas deliveries
-                    /*thread =
-                        new Thread(
-                            () =>
-                                PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + subscriber + ", " +
-                                                        message[1]));
-                    thread.Start();*/
+                    try
+                    {
+                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                message[1]);
+                    } catch(Exception) { }
+                    
                 }
 
                 Utility.DebugLog("Resending pub to " + requestingSite);
@@ -1144,7 +1155,6 @@ namespace Broker
                         IProcess proc;
                         if (subscriber != null && LocalProcesses.TryGetValue(subscriber, out proc))
                         {
-                            // TODO: refactor this to use the SendPublication
                             ISubscriber subProc = (ISubscriber) proc;
                             new Thread(() => subProc.DeliverPublication(message[0], message[1], message[2], i1)).Start();
                         } else if (askingSite.Equals(ParentSite))
@@ -1186,7 +1196,14 @@ namespace Broker
                             {
                                 new Thread(
                                     () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + message[1]))
+                                    {
+                                        try
+                                        {
+                                            PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
+                                                                    message[1]);
+                                        }
+                                        catch (Exception) { }
+                                    })
                                     .Start();
                             }
 
@@ -1234,7 +1251,6 @@ namespace Broker
 
                 string fromSite = messageInfo[3];
 
-                // TODO: when the notif arrives at site0 it somehow goes unnoticed
                 // check for lost messages up the chain 
                 if (fromSite.Equals(SiteName))
                 {
@@ -1390,8 +1406,6 @@ namespace Broker
                 HoldbackQueue = queue;
                 OutSequenceNumbers = outSeqs;
 
-                // TODO: remove this to enable the load balancing for subs
-                // deliverProcess = ProcessName;
                 if (deliverProcess.Equals(ProcessName))
                 {
                     // if the subscription was already processed, we don't multicast it
@@ -1626,8 +1640,6 @@ namespace Broker
 
             lock (this.Subscribing)
             {
-                //lock (HoldbackQueue)
-                //{
                 if (Status.Equals(Status.Frozen))
                 {
                     FrozenMessages.Enqueue(eventMessage);
@@ -1853,8 +1865,6 @@ namespace Broker
 
             lock (ProcessLocks[subscriber])
             {
-                Console.Out.WriteLine("Deliver unsub");
-
                 lock (SiblingBrokers)
                 {
                     // if we're using more than one broker

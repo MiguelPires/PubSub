@@ -46,6 +46,9 @@ namespace PuppetMaster
             string line;
             while ((line = reader.ReadLine()) != null)
             {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
                 ParseConfig(line);
             }
 
@@ -164,7 +167,6 @@ namespace PuppetMaster
                                 {
                                     try
                                     {
-
                                         proc.DeliverCommand(new[] {command[1]});
                                     } catch (Exception ex)
                                     {
@@ -194,15 +196,13 @@ namespace PuppetMaster
                                     try
                                     {
                                         process.DeliverCommand(processArgs);
-                                    }
-                                    catch (Exception ex)
+                                    } catch (Exception ex)
                                     {
                                         // the crash command is supposed to generate an exception
                                         if (!processArgs[0].Equals("Crash"))
                                             Utility.DebugLog("WARNING: " + ex.Message);
                                     }
                                 }).Start();
-                                
                             } else
                             {
                                 new Thread(() =>
@@ -210,8 +210,7 @@ namespace PuppetMaster
                                     try
                                     {
                                         Slaves[site].DeliverCommand(command);
-                                    }
-                                    catch (Exception ex)
+                                    } catch (Exception ex)
                                     {
                                         if (!command[0].Equals("Crash"))
                                             Utility.DebugLog("WARNING: " + ex.Message);
@@ -219,7 +218,6 @@ namespace PuppetMaster
                                 }).Start();
                             }
                         }
-
                     } else
                         Monitor.Wait(this.CommandQueue);
                 }

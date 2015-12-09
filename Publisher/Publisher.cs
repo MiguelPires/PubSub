@@ -165,7 +165,7 @@ namespace Publisher
             if (message == null)
                 return;
 
-            Utility.DebugLog("Resending publication with seq no "+sequenceNumber);
+            Utility.DebugLog("Resending publication with seq no " + sequenceNumber);
             SendPublication(message[0], message[1], sequenceNumber);
         }
 
@@ -188,9 +188,6 @@ namespace Publisher
                 return false;
             }
 
-            // TODO: verificar que os event numbers estao minimamente consistentes com os seq nos
-            // TODO: compilar no Debug e no Release
-            // TODO: zip e entregar
             for (int i = 0; i < numberOfEvents; i++)
             {
                 lock (this)

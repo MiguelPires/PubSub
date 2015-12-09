@@ -1,11 +1,6 @@
-###################################################
-##
-##				SESDAD
-##
-##	Author: Miguel Pires
-##  Email: miguel.pires@tecnico.ulisboa.pt
-##
-###################################################
+# SESDAD
+**Author:** Miguel Pires <br/>
+**Email:** miguel.pires@tecnico.ulisboa.pt
 
 ## Configuration file
 
@@ -28,12 +23,16 @@ in each).
 To launch a "slave" site just type the following in a shell in the root directory 
 (the SESDAD folder):
 
+``` bash
 $ PuppetMaster/bin/Debug/PuppetMaster.exe site1
+```
 
 To launch a "master" site just type the following in a shell in the root directory 
 (the SESDAD folder):
 
+``` bash
 $ PuppetMaster/bin/Debug/PuppetMaster.exe -m site0
+```
 
 The presence of the '-m' flag indicates the site where the PuppetMaster"Master" 
 should be located. Any other site will have a PuppetMaster"Slave".
@@ -41,17 +40,17 @@ should be located. Any other site will have a PuppetMaster"Slave".
 ## Inserting commands
 
 An example script 'script.txt' is also located in the root directory and subscribes the two
-subscribers, subscriber2 and subscriber1, to topics '/p/*' and '/p/a', respectively. Then
+subscribers, subscriber2 and subscriber1, to topics '/p/\*' and '/p/a', respectively. Then
 the publishers, publisher00 and publisher01, publish events on the topics '/p/a' and '/p/b'
 (20 events each). The point of this is to demonstrate the working of hierachical filtering.
 The subscriber2 will receive every event (about 80) and subscriber2 (about 40).
-It is IMPORTANT to notice that they might not receive every event since there is no delay
+It is **important** to notice that they might not receive every event since there may be no delay
 between the "subscribe" and "publish" commands, so the publishers might miss an arbitrary
-ammount of initial publications (it's usual not much, just one or two, but it fluctuates).
+ammount of initial publications (it's usual not much but it fluctuates).
 After this, the PuppetMaster waits, sends a 'Status' request, unsubscribes from one topic and
 sends another 'Status' request.
 
-NOTE: Please give enough time for the system to start-up (usualy just a few seconds) or some commands
+NOTE: Please give enough time for the system to start-up (just a few seconds) or some commands
 might not be delivered since the services aren't all up and running. The system will be ready when
 every process console says "Running a <process-name> at <url> - <site>". Brokers also have to
 display two "Received sibling ..." messages that mean the broker has been informed of who are it's

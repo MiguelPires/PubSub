@@ -46,7 +46,7 @@ namespace PuppetMaster
                                 Master.DeliverLog(logMessage);
                             } catch (Exception ex)
                             {
-                                Utility.DebugLog(ex.Message);
+                                //Utility.DebugLog(ex.Message);
                             }
                         }).Start();
 

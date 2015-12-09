@@ -131,7 +131,7 @@ namespace CommonTypes
         /// <summary>
         //      Enables or disables verbose printing of info 
         /// </summary>
-        public static bool DEBUG = false;
+        public static bool DEBUG = true;
 
         /// <summary>
         ///     Prints a message according to the debug variable
@@ -234,7 +234,7 @@ namespace CommonTypes
 
                     if (retryCount == 0)
                     {
-                        Console.Out.WriteLine("Error: Couldn't connect to " + url + " after " + maximumTries + " tries. ");
+                        Utility.DebugLog("Error: Couldn't connect to " + url + " after " + maximumTries + " tries. ");
                         throw;
                     }
 

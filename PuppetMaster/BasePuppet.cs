@@ -4,7 +4,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using CommonTypes;
 
 #endregion
@@ -112,7 +111,6 @@ namespace PuppetMaster
                     return;
             }
 
-            //new Thread (() => Process.Start(startInfo)).Start();
             Process.Start(startInfo);
             LocalProcesses[processName] = (IProcess) Activator.GetObject(typeof (IProcess), processUrl);
             LocalProcessesUrls[processName] = processUrl;

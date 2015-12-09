@@ -21,8 +21,8 @@ namespace PuppetMaster
         public void DeliverMessage(string log)
         {
             this.LogBox.AppendText(log + "\r\n");
-            LogBox.SelectionStart = LogBox.Text.Length;
-            LogBox.ScrollToCaret();
+            this.LogBox.SelectionStart = this.LogBox.Text.Length;
+            this.LogBox.ScrollToCaret();
         }
 
         private void label1_Click(object sender, EventArgs e)

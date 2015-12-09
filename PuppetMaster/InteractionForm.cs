@@ -45,8 +45,8 @@ namespace PuppetMaster
             this.logBox.AppendText(message.Trim() + "\r\n");
             this.logBox.Select(start, end);
             this.logBox.SelectionColor = Color.Black;
-            logBox.SelectionStart = logBox.Text.Length;
-            logBox.ScrollToCaret();
+            this.logBox.SelectionStart = this.logBox.Text.Length;
+            this.logBox.ScrollToCaret();
         }
 
         private void IndividualButton_Click(object sender, EventArgs e)
@@ -72,8 +72,8 @@ namespace PuppetMaster
                 this.logBox.SelectionColor = Color.Red;
             }
             this.IndividualBox.Clear();
-            logBox.SelectionStart = logBox.Text.Length;
-            logBox.ScrollToCaret();
+            this.logBox.SelectionStart = this.logBox.Text.Length;
+            this.logBox.ScrollToCaret();
         }
 
         private void GroupButton_Click(object sender, EventArgs e)
@@ -107,8 +107,8 @@ namespace PuppetMaster
             }
 
             this.GroupBox.Clear();
-            logBox.SelectionStart = logBox.Text.Length;
-            logBox.ScrollToCaret();
+            this.logBox.SelectionStart = this.logBox.Text.Length;
+            this.logBox.ScrollToCaret();
         }
 
         private void GroupBox_TextChanged(object sender, EventArgs e)

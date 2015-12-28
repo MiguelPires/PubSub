@@ -234,7 +234,7 @@ namespace CommonTypes
 
                     if (retryCount == 0)
                     {
-                        Utility.DebugLog("Error: Couldn't connect to " + url + " after " + maximumTries + " tries. ");
+                        DebugLog("Error: Couldn't connect to " + url + " after " + maximumTries + " tries. ");
                         throw;
                     }
 

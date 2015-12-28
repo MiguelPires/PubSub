@@ -11,6 +11,10 @@ using CommonTypes;
 
 namespace Broker
 {
+    // NOTE: this whole class needs some heavy refactoring which, unfortunately, I don't
+    // have time to do right now. 
+    // There are some unused methods because of pending changes I never got to complete.
+
     public class Broker : BaseProcess, IBroker
     {
         // maps a site's name to a list of the site's brokers
@@ -554,8 +558,9 @@ namespace Broker
                                         () =>
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                                     topic)).Start();
-                                } catch(Exception) { }
-                                
+                                } catch (Exception)
+                                {
+                                }
                             }
                             Thread thread = new Thread(() =>
                             {
@@ -614,9 +619,11 @@ namespace Broker
                             {
                                 new Thread(
                                     () =>
-                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic)).Start();
-                            }catch(Exception) { }
-                            
+                                        PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " + topic))
+                                    .Start();
+                            } catch (Exception)
+                            {
+                            }
                         }
 
                         Thread thread = new Thread(() =>
@@ -703,7 +710,8 @@ namespace Broker
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                                     topic);
                                         } catch (Exception)
-                                        {}
+                                        {
+                                        }
                                     }
                                     ).Start();
                             }
@@ -768,8 +776,8 @@ namespace Broker
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                                     topic)).Start();
                                 } catch (Exception)
-                                {}
-
+                                {
+                                }
                             }
 
                             Thread thread = new Thread(() =>
@@ -1087,8 +1095,9 @@ namespace Broker
                     {
                         PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                 message[1]);
-                    } catch(Exception) { }
-                    
+                    } catch (Exception)
+                    {
+                    }
                 }
 
                 Utility.DebugLog("Resending pub to " + requestingSite);
@@ -1201,8 +1210,9 @@ namespace Broker
                                         {
                                             PuppetMaster.DeliverLog("BroEvent " + ProcessName + ", " + publisher + ", " +
                                                                     message[1]);
+                                        } catch (Exception)
+                                        {
                                         }
-                                        catch (Exception) { }
                                     })
                                     .Start();
                             }

@@ -1,6 +1,6 @@
 # SESDAD
 
-**SESDAD** is a distributed topic-filtered publish-subscribe system that provides reliability and ordering guarantees. For details on how the filtering and the ordering and reliability guarantees were implemented, please see "sesdad-report.pdf".
+**SESDAD** is a distributed topic-filtered publish-subscribe system that provides reliability and ordering guarantees. For details on how the filtering and the ordering and reliability guarantees were implemented, please see [the report](https://github.com/MiguelPires/SESDAD/blob/master/sesdad-report.pdf).
 
 **Author:** Miguel Pires <br/>
 **Email:** miguel.pires@tecnico.ulisboa.pt

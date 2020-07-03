@@ -65,10 +65,3 @@ in the log in red color (as it does with correct commands but in standard black 
 
 For the PuppetMasterSlaves UI, there is only a log of events observed in that site. 
 There is no way to interact with the system through these windows.
-
-NOTE: If you want to use 'Enter' to insert a newline when writing batch commands 
-by hand, then use SHIFT-Enter. Pressing plain Enter sends the commands as if you 
-clicked the 'Send' button.
-
-
-Thank you.
